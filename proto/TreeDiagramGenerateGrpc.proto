@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.construction.management.grpc";
+option java_outer_classname = "TreeDiagramGenerateProto";
+
+package com.construction.management.grpc;
+
+service TreeDiagramGenerateGrpcService {
+  rpc getImage(TreeDiagramGenerateGrpcRequest) returns (TreeDiagramGenerateGrpcResponse);
+  rpc saveProjectWithImage(TreeDiagramGenerateGrpcRequest) returns (TreeDiagramGenerateGrpcResponse);
+
+}
+
+message Position {
+    int32 level = 1;
+    string employeeId = 2;
+    string parentId = 3;
+    string name = 4;
+    string title = 5;
+    string department = 6;
+    string subDepartment = 7;
+}
+
+
+message TreeDiagramGenerateGrpcRequest {
+  repeated Position position = 1;
+}
+
+message TreeDiagramGenerateGrpcResponse {
+  // `bytes` 類型用來傳輸圖片的二進位資料
+  bytes treeDiagramData = 1;
+}

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.construction.management.grpc";
+option java_outer_classname = "GrpcServiceProto";
+
+package com.construction.management.grpc;
+
+service GRPCService {
+  rpc greeting (GRPCRequest) returns (GRPCResponse);
+}
+
+message GRPCRequest {
+  string name = 1;
+}
+
+message GRPCResponse {
+  string message = 1;
+}
