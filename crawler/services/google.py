@@ -12,7 +12,7 @@ def fetch_google_data(keywords, social_platforms=None):
     Fetch data from Google Search (SerpApi -> Google Web -> DuckDuckGo).
     """
     results = []
-    print("\n🔍 [Search Service] Helper started (SerpApi -> Google -> DDG)...")
+    print("\n🔍 [Search Service] Helper started (SerpApi -> Google -> DDG)...", flush=True)
     
     # ... (rest of the function setup)
     
@@ -46,18 +46,25 @@ def fetch_google_data(keywords, social_platforms=None):
     
     # Process queries
     for params in all_queries:
-        _perform_search_with_fallback(params, results, ua.random)
+        query_results = []
+        _perform_search_with_fallback(params, query_results, ua.random)
+        
+        # Log immediately after each query to show progress in file
+        if query_results:
+            from ..utils.file_logger import log_results_to_file
+            log_results_to_file(query_results)
+            results.extend(query_results)
         
         # Slower sleep is still good practice, but SerpApi is faster
         sleep_time = random.uniform(5, 10) 
-        print(f"      💤 Sleeping for {sleep_time:.1f}s...")
+        print(f"      💤 Sleeping for {sleep_time:.1f}s...", flush=True)
         time.sleep(sleep_time)
                 
     return results
 
 def _perform_search_with_fallback(params, results_list, user_agent):
     query = params["query"]
-    print(f"   -> Searching: {query}")
+    print(f"   -> Searching: {query}", flush=True)
     
     # --- 1. Try SerpApi First (Most Reliable) ---
     if SERPAPI_KEY and "YOUR_API_KEY" not in SERPAPI_KEY:
@@ -74,7 +81,7 @@ def _perform_search_with_fallback(params, results_list, user_agent):
                     })
                 return True
         except Exception as e:
-            print(f"   ⚠️ [SerpApi] Skipped/Failed: {e}")
+            print(f"   ⚠️ [SerpApi] Skipped/Failed: {e}", flush=True)
     
     # --- 2. Try Google Direct (Free but Block-prone) ---
     try:
@@ -99,8 +106,8 @@ def _perform_search_with_fallback(params, results_list, user_agent):
         return True
         
     except Exception as e:
-        print(f"   ⚠️ [Google] Failed/Blocked: {e}")
-        print("   twisted_rightwards_arrows Switching to DuckDuckGo Fallback...")
+        print(f"   ⚠️ [Google] Failed/Blocked: {e}", flush=True)
+        print("   twisted_rightwards_arrows Switching to DuckDuckGo Fallback...", flush=True)
         
         # --- Fallback to DuckDuckGo ---
         try:
@@ -115,5 +122,5 @@ def _perform_search_with_fallback(params, results_list, user_agent):
                 })
             return True
         except Exception as ddg_e:
-            print(f"      ❌ [DDG] Fallback also failed: {ddg_e}")
+            print(f"      ❌ [DDG] Fallback also failed: {ddg_e}", flush=True)
             return False

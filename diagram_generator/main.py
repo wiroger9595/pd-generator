@@ -3,7 +3,7 @@
 
 from fastapi import FastAPI
 from diagram_generator.core.config import API_TITLE, API_DESCRIPTION, API_VERSION
-from diagram_generator.api.routes import image, diagram, org_chart, crawler
+from diagram_generator.api.routes import image, diagram, org_chart
 
 # 1. 建立 FastAPI 實例
 diagram_generator = FastAPI(
@@ -16,7 +16,6 @@ diagram_generator = FastAPI(
 diagram_generator.include_router(image.router)
 diagram_generator.include_router(diagram.router)
 diagram_generator.include_router(org_chart.router)
-diagram_generator.include_router(crawler.router)
 
 # 3. 根路徑
 @diagram_generator.get("/", summary="根路徑", include_in_schema=False)

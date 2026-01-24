@@ -1,31 +1,22 @@
-# --- Web API Server (FastAPI) ---
+# Common
+numpy
+pandas
+yfinance
 fastapi
-uvicorn[standard]
-python-multipart
+uvicorn
 python-dotenv
-
-# --- gRPC Service ---
-grpcio
-grpcio-tools
-grpcio-reflection
-
-# --- Diagram & Image Processing (繪圖與影像) ---
-diagrams
-graphviz
-Pillow
-
-# --- Crawler & Scraper (爬蟲與排程) ---
 requests
-beautifulsoup4
-facebook-scraper
-googlesearch-python
-feedparser
+lxml
 schedule
-apscheduler
-duckduckgo-search
-fake-useragent
-
-# --- Process Management & Dev Tools (管理與開發) ---
-honcho
+html5lib
+beautifulsoup4
+line-bot-sdk
+ib_insync
+nest_asyncio
+matplotlib
+scipy
+watchfiles
 watchdog
-sqlalchemy
+diagrams
+python-multipart
+# ta-lib # 需要手動安裝系統依賴 brew install ta-lib

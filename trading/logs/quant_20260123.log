@@ -1,0 +1,53 @@
+2026-01-23 21:15:25,215 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 83584)
+2026-01-23 21:15:25,215 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-23 21:15:25,218 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-23 21:15:25,218 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-23 21:17:00,200 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 83924)
+2026-01-23 21:17:00,200 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-23 21:17:00,200 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-23 21:17:00,200 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-23 21:21:05,068 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 84955)
+2026-01-23 21:21:05,069 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-23 21:21:05,070 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-23 21:21:05,070 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-23 21:21:07,063 - quant_trading - INFO - 🚀 正在啟動 Trading System...
+2026-01-23 21:21:14,843 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-23 21:21:14,844 - quant_trading - INFO - 🔄 嘗試連線至 IBKR (執行緒隔離模式) 127.0.0.1:7497
+2026-01-23 21:21:15,681 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-23 21:21:26,186 - quant_trading - INFO - ⚠️ IB 無法獲取 AAPL 有效行情 (可能是 nan 或無訂閱)，嘗試 yfinance 備援...
+2026-01-23 21:21:26,749 - quant_trading - ERROR - 下單指令執行時發生崩潰
+Traceback (most recent call last):
+  File "/Users/chenrobert/Documents/code_life/python-server-cmp/trading/app.py", line 119, in handle_message
+    result = await service.execute_smart_buy(ticker, qty, discount_pct=0.015, profit_target_pct=0.03)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/chenrobert/Documents/code_life/python-server-cmp/trading/src/services/trading_service.py", line 35, in execute_smart_buy
+    if math.isnan(limit_buy_price) or (take_profit_price and math.isnan(take_profit_price)):
+                  ^^^^^^^^^^^^^^^
+NameError: name 'limit_buy_price' is not defined
+2026-01-23 21:24:16,334 - quant_trading - INFO - ⚠️ IB 無法獲取 AAPL 有效行情 (可能是 nan 或無訂閱)，嘗試 yfinance 備援...
+2026-01-23 21:24:16,787 - quant_trading - ERROR - 下單指令執行時發生崩潰
+Traceback (most recent call last):
+  File "/Users/chenrobert/Documents/code_life/python-server-cmp/trading/app.py", line 119, in handle_message
+    result = await service.execute_smart_buy(ticker, qty, discount_pct=0.015, profit_target_pct=0.03)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/chenrobert/Documents/code_life/python-server-cmp/trading/src/services/trading_service.py", line 35, in execute_smart_buy
+    limit_buy_price = round(current_price * (1 - discount_pct), 2)
+                  ^^^^^^^^^^^^^^^
+NameError: name 'limit_buy_price' is not defined
+2026-01-23 21:24:33,712 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-23 21:24:37,435 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 85473)
+2026-01-23 21:24:37,435 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-23 21:24:37,435 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-23 21:24:37,435 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-23 21:24:39,297 - quant_trading - INFO - 🚀 正在啟動 Trading System...
+2026-01-23 21:24:42,006 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-23 21:24:42,007 - quant_trading - INFO - 🔄 嘗試連線至 IBKR (執行緒隔離模式) 127.0.0.1:7497
+2026-01-23 21:24:42,330 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-23 21:24:58,730 - quant_trading - INFO - ⚠️ IB 無法獲取 AAPL 有效行情 (可能是 nan 或無訂閱)，嘗試 yfinance 備援...
+2026-01-23 21:24:59,223 - quant_trading - INFO - 🎯 建立 Bracket Order: 買入價 $244.62 -> 獲利賣出價 $251.96
+2026-01-23 21:55:03,801 - quant_trading - INFO - ⚠️ IB 無法獲取 AMAZ 有效行情 (可能是 nan 或無訂閱)，嘗試 yfinance 備援...
+2026-01-23 21:55:46,358 - quant_trading - INFO - ⚠️ IB 無法獲取 AMZN 有效行情 (可能是 nan 或無訂閱)，嘗試 yfinance 備援...
+2026-01-23 21:55:46,560 - quant_trading - INFO - 🎯 建立 Bracket Order: 買入價 $230.82 -> 獲利賣出價 $237.74
+2026-01-23 21:56:14,164 - quant_trading - INFO - ⚠️ IB 無法獲取 GOOG 有效行情 (可能是 nan 或無訂閱)，嘗試 yfinance 備援...
+2026-01-23 21:56:14,377 - quant_trading - INFO - 🎯 建立 Bracket Order: 買入價 $325.88 -> 獲利賣出價 $335.66
+2026-01-23 23:45:28,357 - quant_trading - INFO - 👋 正在關閉 Trading System...

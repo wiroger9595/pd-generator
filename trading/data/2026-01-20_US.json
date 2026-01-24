@@ -1,0 +1,18 @@
+[
+    {
+        "ticker":"PWR",
+        "name":"QUANTA SERVICES INC",
+        "price":466.75,
+        "reason":"量增2.0倍 | 漲幅4.3% | 站上月線($466.75 > $433.90)",
+        "date":"2026-01-20",
+        "market":"US"
+    },
+    {
+        "ticker":"SMCI",
+        "name":"SUPER MICRO COMPUTER INC",
+        "price":32.64,
+        "reason":"量增1.8倍 | 漲幅10.9% | 站上月線($32.64 > $30.16)",
+        "date":"2026-01-20",
+        "market":"US"
+    }
+]

@@ -55,6 +55,32 @@ project_root/
 │   └── social_data.db      # SQLite 資料庫 (自動生成)
 │
 └── generated_diagrams/     # [輸出目錄] 生成的 PNG 圖片
+|   
+└── stock_picker/
+    │
+    ├── .env                     # [機密] 存放 LINE Token
+    ├── .gitignore               # [Git] 忽略檔
+    ├── config.py                # [設定] 參數設定中心 (台/美股分開)
+    ├── main.py                  # [入口] 程式啟動點
+    │
+    └── src/
+        ├── __init__.py
+        │
+        ├── data/                # [資料層]
+        │   ├── __init__.py
+        │   ├── crawler.py       # 抓取股票清單 (台股上市櫃 / 美股SP500)
+        │   └── fetcher.py       # 抓取 K線歷史資料 (yfinance)
+        │
+        ├── strategies/          # [策略層]
+        │   ├── __init__.py
+        │   └── volume_strategy.py  # 爆量長紅策略邏輯
+        │
+        └── utils/               # [工具層]
+            ├── __init__.py
+            └── notifier.py      # LINE Notify 發送器
+
+
+
 🛠️ 安裝與設定 (Installation)
 1. 系統需求
 Python 3.9+
