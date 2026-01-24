@@ -2,6 +2,7 @@ import os
 import asyncio
 import nest_asyncio
 import math
+import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Body, Request, BackgroundTasks
 import yfinance as yf
@@ -11,11 +12,12 @@ from src.engine.backtester import VectorizedBacktester
 from src.engine.predictor import SellPredictor
 from src.strategies.moving_average import ma_cross_strategy
 from src.strategies.trend_follower import trend_following_strategy
-from src.broker.ib_handler import IBHandler
+from src.broker.manager import BrokerManager
 from src.services.trading_service import TradingService
 from src.database.db_handler import record_buy, record_sell, get_holdings, get_active_tickers
 from src.services.scanner_service import run_scan
 from src.utils.logger import logger
+from src.data.analyzer import CrossAnalyzer
 
 # LINE Bot 相關
 from linebot.v3.webhook import WebhookParser
@@ -45,23 +47,27 @@ async def lifespan(app: FastAPI):
     """
     FastAPI 生命週期管理
     """
-    logger.info("🚀 正在啟動 Trading System...")
+    logger.info("🚀 正在啟動 Trading System (台美雙系統架構)... ")
     
-    # 初始化 IB 控制器
-    app.state.ib_handler = IBHandler(
-        host=os.getenv("IB_HOST", "127.0.0.1"),
-        port=int(os.getenv("IB_PORT", 7497)),
-        client_id=int(os.getenv("IB_CLIENT_ID", 10))
-    )
+    ib_params = {
+        "host": os.getenv("IB_HOST", "127.0.0.1"),
+        "port": int(os.getenv("IB_PORT", 7497)),
+        "client_id": int(os.getenv("IB_CLIENT_ID", 10))
+    }
     
-    # 初始化 交易服務
-    app.state.trading_service = TradingService(app.state.ib_handler)
+    # 核心：券商管理器 (自動路由台美股)
+    app.state.broker_manager = BrokerManager(ib_params)
+    app.state.trading_service = TradingService(app.state.broker_manager)
+    app.state.analyzer = CrossAnalyzer()
+    
+    # 預連線
+    await app.state.broker_manager.connect_all()
     
     yield
     
     logger.info("👋 正在關閉 Trading System...")
-    if hasattr(app.state, "ib_handler"):
-        app.state.ib_handler.disconnect()
+    if hasattr(app.state.broker_manager.us_broker, "ib"):
+        app.state.broker_manager.us_broker.ib.disconnect()
 
 app = FastAPI(title="Trading System API", lifespan=lifespan)
 
@@ -95,31 +101,78 @@ async def handle_message(event):
     parts = text.split()
     if not parts: return
 
-    # --- 解析指令與參數 ---
-    # 支援: BUY AAPL 1 [1.5%] [3%]
-    # 支援: SELL TSLA 1 [3%]
-    
     cmd = parts[0]
-    is_order = cmd in ["BUY", "SELL", "買", "賣", "ORDER", "下單"]
-    
-    if is_order and len(parts) >= 3:
+
+    # --- 1. 分析指令 (Cross-Analysis) ---
+    if cmd in ["分析", "ANALYZE"]:
+        symbol = parts[1] if len(parts) > 1 else None
+        if not symbol:
+            reply_text = "❌ 請提供股票代號，例如：分析 AAPL"
+        else:
+            try:
+                analyzer = app.state.analyzer
+                report = await analyzer.analyze_symbol(symbol)
+                
+                if "error" in report:
+                    reply_text = f"❌ 分析失敗：{report['error']}"
+                else:
+                    prof = report.get('professional_data')
+                    prof_info = "N/A"
+                    
+                    if report['market'] == "US" and prof:
+                        rating_map = {1: "強力買入", 2: "買入", 3: "持有", 4: "賣出", 5: "強力賣出"}
+                        r_val = round(prof.get('analyst_rating', 0))
+                        prof_info = f"🏛️ 華爾街預測：{rating_map.get(r_val, 'N/A')} (目標價: ${prof.get('target_price')})"
+                    elif report['market'] == "TW" and prof:
+                        net_buy = prof.get('recent_3d_net', 0)
+                        status = "買超 🚀" if net_buy > 0 else "賣超 📉"
+                        prof_info = f"🤝 法人動向：近3日{status} ({net_buy:,}股)"
+
+                    reply_text = (f"📊 {symbol} 專業交叉分析\n"
+                                 f"━━━━━━━━━━━\n"
+                                 f"💵 目前現價：${report['current_price']}\n"
+                                 f"{prof_info}\n"
+                                 f"📡 TV 技術信號：{report['tv_signal'].get('RECOMMENDATION', 'N/A')}\n"
+                                 f"🧠 建議買點(低)：${report['suggested_buy_low']}\n"
+                                 f"🏔️ 建議賣點(高)：${report['suggested_sell_high']}\n"
+                                 f"📉 短線 RSI：{report['rsi']}\n"
+                                 f"━━━━━━━━━━━\n"
+                                 f"💡 綜合評價：{report['recommendation']} ({report['score']}分)")
+            except Exception as e:
+                logger.exception("分析指令出錯")
+                reply_text = f"❌ 系統錯誤：{str(e)}"
+
+    # --- 2. 下單指令 (Trading) ---
+    elif cmd in ["BUY", "SELL", "買", "賣", "ORDER", "下單"] and len(parts) >= 3:
         try:
             action = "BUY" if cmd in ["BUY", "買"] or (cmd in ["ORDER", "下單"] and "BUY" in parts[1]) else "SELL"
-            # 處理下單格式位移
             ticker_idx = 2 if cmd in ["ORDER", "下單"] else 1
             qty_idx = ticker_idx + 1
             
             ticker = parts[ticker_idx]
             qty = float(parts[qty_idx])
             
-            # --- 解析自定義百分比 (選填) ---
-            # 預設值
             disc_pct = 0.015
             tp_pct = 0.03
+            trail_pct = None
+            force_broker = None
             
-            # 抓取指令後面的剩餘參數
+            # 券商標記
+            if parts[-1].startswith("@"):
+                force_broker = parts.pop().replace("@", "")
+
+            # 追蹤止損標記
+            if "TS" in parts:
+                ts_idx = parts.index("TS")
+                if len(parts) > ts_idx + 1:
+                    trail_val = parts[ts_idx + 1]
+                    try:
+                        trail_pct = float(trail_val.replace("%", "")) / 100.0 if "%" in trail_val else float(trail_val)
+                        if trail_pct > 1: trail_pct /= 100.0
+                    except: pass
+                parts = parts[:ts_idx]
+
             extra_params = parts[qty_idx+1:]
-            
             def parse_pct(s, default):
                 try:
                     s = s.replace("%", "")
@@ -127,59 +180,43 @@ async def handle_message(event):
                     return val / 100.0 if val >= 0.1 else val
                 except: return default
 
+            service = app.state.trading_service
+            broker_name = force_broker if force_broker else ("台股" if re.match(r'^\d+$', str(ticker)) else "美股")
+
             if action == "BUY":
                 if len(extra_params) >= 1: disc_pct = parse_pct(extra_params[0], 0.015)
                 if len(extra_params) >= 2: tp_pct = parse_pct(extra_params[1], 0.03)
-                
-                service = app.state.trading_service
-                result = await service.execute_smart_buy(ticker, qty, discount_pct=disc_pct, profit_target_pct=tp_pct)
+                result = await service.execute_smart_buy(ticker, qty, discount_pct=disc_pct, profit_target_pct=tp_pct, force_broker=force_broker)
                 
                 if result and "error" not in result:
-                    buy_p = result.get("computed_buy_price")
-                    tp_p = result.get("computed_take_profit")
-                    reply_text = (f"🚀 IB 智慧掛單成功！\n"
-                                 f"股票：{ticker} (數量:{qty})\n"
-                                 f"🔹 買入限價：${buy_p} (折價:{disc_pct*100:.1f}%)\n"
-                                 f"🔸 獲利賣價：${tp_p} (目標:{tp_pct*100:.1f}%)")
-                    record_buy("US", ticker, ticker, buy_p)
+                    reply_text = (f"🚀 {broker_name} 智慧掛單成功！\n"
+                                 f"代號：{ticker} (數量:{qty})\n"
+                                 f"🔹 買入限價：${result.get('computed_buy_price')}\n"
+                                 f"🔸 獲利賣價：${result.get('computed_take_profit')}")
+                    record_buy("TW" if "TW" in broker_name or (not force_broker and re.match(r'^\d+$', ticker)) else "US", ticker, ticker, result.get('computed_buy_price'))
                 else:
-                    reply_text = f"❌ 下單失敗：{result.get('error', '未知錯誤')}"
+                    reply_text = f"❌ {broker_name} 下單失敗：{result.get('error', '未知錯誤')}"
             
             else: # SELL
-                if len(extra_params) >= 1: tp_pct = parse_pct(extra_params[0], 0.03)
-                
-                service = app.state.trading_service
-                result = await service.execute_smart_sell(ticker, qty, premium_pct=tp_pct)
-                
-                if result and "error" not in result:
-                    sell_p = result.get("computed_price")
-                    reply_text = (f"🚀 IB 限價賣單已送出！\n"
-                                 f"股票：{ticker} (數量:{qty})\n"
-                                 f"目標售價：${sell_p} (溢價:{tp_pct*100:.1f}%)")
+                if trail_pct:
+                    result = await service.execute_smart_sell(ticker, qty, force_broker=force_broker, trailing_percent=trail_pct)
+                    reply_text = f"📉 {broker_name} 追蹤止損已啟動！\n代號：{ticker}\n追蹤跌幅：{trail_pct*100:.1f}%" if "error" not in result else f"❌ 失敗：{result['error']}"
                 else:
-                    reply_text = f"❌ 下單失敗：{result.get('error', '未知錯誤')}"
+                    if len(extra_params) >= 1: tp_pct = parse_pct(extra_params[0], 0.03)
+                    result = await service.execute_smart_sell(ticker, qty, premium_pct=tp_pct, force_broker=force_broker)
+                    reply_text = f"🚀 {broker_name} 限價賣單已送出！\n代號：{ticker}\n目標售價：${result.get('computed_price')}" if "error" not in result else f"❌ 失敗：{result['error']}"
 
         except Exception as e:
-            logger.exception("下單解析錯誤")
-            reply_text = f"❌ 指令解析失敗: {str(e)}\n範例：BUY AAPL 1 2% 5%"
+            reply_text = f"❌ 指令解析失敗: {str(e)}"
 
-    # --- 記錄邏輯 ---
+    # --- 3. 手動記錄指令 ---
     elif text.startswith("+") or text.startswith("買入"):
         ticker = text[1:] if text.startswith("+") else parts[-1]
         try:
             info = yf.Ticker(ticker).info
             price = info.get('currentPrice') or info.get('regularMarketPreviousClose') or 0
-            if record_buy("US", ticker, ticker, price):
+            if record_buy("US" if not re.match(r'^\d+$', ticker) else "TW", ticker, ticker, price):
                 reply_text = f"✅ 已記錄買入！\n股票：{ticker}\n進場價：${price}"
-        except: reply_text = "❌ 記錄失敗"
-
-    elif text.startswith("-") or text.startswith("賣出"):
-        ticker = text[1:] if text.startswith("-") else parts[-1]
-        try:
-            price = yf.Ticker(ticker).info.get('currentPrice') or 0
-            success, res = record_sell("US", ticker, price)
-            if success:
-                reply_text = f"💰 已結算！\n股票：{ticker}\n損益：{res['pnl_percent']:.2f}%"
         except: reply_text = "❌ 記錄失敗"
 
     if reply_text:
@@ -190,28 +227,38 @@ async def handle_message(event):
                 messages=[TextMessage(text=reply_text)]
             ))
 
-# --- IBKR 交易 API Endpoints ---
-@app.post("/broker/ib/connect")
-async def connect_ib():
-    success = await app.state.ib_handler.connect()
-    return {"message": "已連線" if success else "連線失敗"}
+# --- API Endpoints ---
+@app.post("/webhook/tradingview")
+async def tradingview_webhook(request: Request, background_tasks: BackgroundTasks):
+    try:
+        data = await request.json()
+        ticker = data.get("ticker")
+        action = data.get("action", "BUY").upper()
+        qty = float(data.get("qty", 1))
+        
+        async def process_tv_order():
+            service = app.state.trading_service
+            if action == "BUY":
+                await service.execute_smart_buy(ticker, qty)
+                msg = f"🤖 [TV 訊號] {ticker} 買入成功"
+            else:
+                await service.execute_smart_sell(ticker, qty)
+                msg = f"🤖 [TV 訊號] {ticker} 賣出成功"
+            
+            line_user_id = os.getenv("LINE_USER_ID")
+            if line_user_id:
+                async with AsyncApiClient(configuration) as api_client:
+                    line_bot_api = AsyncMessagingApi(api_client)
+                    await line_bot_api.push_message(PushMessageRequest(to=line_user_id, messages=[TextMessage(text=msg)]))
 
-@app.get("/broker/ib/account")
-async def get_account():
-    return {"account": await app.state.ib_handler.get_account_summary()}
-
-@app.get("/broker/ib/positions")
-async def get_positions():
-    return {"positions": await app.state.ib_handler.get_positions()}
+        background_tasks.add_task(process_tv_order)
+        return {"status": "received"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/holdings/{market}")
 def list_holdings(market: str): 
     return {"market": market.upper(), "data": get_holdings(market)}
-
-@app.post("/api/trigger-scan/{market}")
-def trigger_scan(market: str, background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_scan, market.lower())
-    return {"message": f"已啟動 {market.upper()} 掃描"}
 
 if __name__ == "__main__":
     import uvicorn

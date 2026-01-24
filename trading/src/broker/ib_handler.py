@@ -2,9 +2,10 @@ import os
 import asyncio
 import threading
 from ib_insync import IB, Stock, MarketOrder, LimitOrder
+from .base import BaseBroker
 from src.utils.logger import logger
 
-class IBHandler:
+class IBHandler(BaseBroker):
     def __init__(self, host='127.0.0.1', port=7497, client_id=1):
         self.host = host
         self.port = port
@@ -85,22 +86,66 @@ class IBHandler:
         if not self.ib.isConnected(): return []
         return [{"symbol": p.contract.symbol, "position": p.position, "avg_cost": p.avgCost} for p in self.ib.positions()]
 
-    async def place_order(self, symbol, action, quantity, order_type='MARKET', price=None, take_profit=None):
+    async def get_analyst_forecast(self, symbol):
         """
-        下單邏輯：支援普通訂單與 Bracket Order (限價買 + 獲利賣)
+        獲取 IBKR 內建的專業分析師預測報告 (Institutional Data)
+        """
+        await self.connect()
+        if not self.ib.isConnected(): return None
+        
+        contract = Stock(symbol, 'SMART', 'USD')
+        # 使用同步版本的 qualifyContracts 在異步包裝中確保合約有效
+        future = asyncio.run_coroutine_threadsafe(self.ib.qualifyContractsAsync(contract), self._loop)
+        await asyncio.wrap_future(future)
+        
+        # 請求解析後的分析師預測報告 (Report Type: RESC)
+        try:
+            data_xml = self.ib.reqFundamentalData(contract, reportType='RESC')
+            if not data_xml: return None
+            
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(data_xml)
+            target_p = root.find(".//Consensus[@Type='TargetPrice']/Mean")
+            rating = root.find(".//Consensus[@Type='Rating']/Mean")
+            
+            return {
+                "target_price": float(target_p.text) if target_p is not None else "N/A",
+                "analyst_rating": float(rating.text) if rating is not None else "N/A",
+                "source": "Wall Street Analysts (via IB)"
+            }
+        except Exception as e:
+            logger.error(f"IB Fundamental Data Error: {e}")
+            return None
+
+from ib_insync import IB, Stock, MarketOrder, LimitOrder, TrailingStopOrder
+# ... (其餘 import 不變)
+
+    async def place_order(self, symbol, action, quantity, order_type='MARKET', price=None, take_profit=None, trailing_percent=None):
+        """
+        下單邏輯：支援普通、Bracket 與 Trailing Stop 訂單
         """
         if not self.ib.isConnected():
             await self.connect()
         
-        contract = Stock(symbol, 'SMART', 'USD')
+        import re
+        if re.match(r'^\d+$', str(symbol)):
+            contract = Stock(symbol, 'TSE', 'TWD')
+        else:
+            contract = Stock(symbol, 'SMART', 'USD')
+
         future = asyncio.run_coroutine_threadsafe(self.ib.qualifyContractsAsync(contract), self._loop)
         qualified_contracts = await asyncio.wrap_future(future)
         if not qualified_contracts: return {"error": f"找不到符號: {symbol}"}
-        
         contract = qualified_contracts[0]
-        
+
+        # 1. 處理普通追蹤止損 (獨立單)
+        if trailing_percent and not take_profit:
+            order = TrailingStopOrder(action, quantity, trailingPercent=trailing_percent, outsideRth=True)
+            trade = self.ib.placeOrder(contract, order)
+            return {"status": "Trailing Stop Submitted", "trailing_percent": trailing_percent, "order_id": trade.order.orderId}
+
+        # 2. 處理 Bracket Order (含獲利+止損)
         if take_profit and action.upper() == 'BUY':
-            # --- 建立 Bracket Order (買入 + 自動掛賣) ---
             parent = LimitOrder('BUY', quantity, price, outsideRth=True)
             parent.orderId = self.ib.client.getReqId()
             parent.transmit = False 
@@ -109,7 +154,7 @@ class IBHandler:
             profit_order.parentId = parent.orderId
             profit_order.transmit = True 
             
-            trade = self.ib.placeOrder(contract, parent)
+            self.ib.placeOrder(contract, parent)
             self.ib.placeOrder(contract, profit_order)
             
             return {
@@ -118,8 +163,9 @@ class IBHandler:
                 "sell_tp_price": take_profit,
                 "order_id": parent.orderId
             }
+        
+        # 3. 處理普通限價/市價單
         else:
-            # --- 普通訂單 ---
             if order_type.upper() == 'MARKET':
                 order = MarketOrder(action, quantity)
             else:

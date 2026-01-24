@@ -18,5 +18,7 @@ scipy
 watchfiles
 watchdog
 diagrams
+tradingview-ta
+pandas_ta
 python-multipart
 # ta-lib # 需要手動安裝系統依賴 brew install ta-lib
