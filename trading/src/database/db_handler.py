@@ -46,6 +46,13 @@ def init_db(db_path):
             market TEXT
         )
     """)
+    # 4. 建立用戶表 (Users) - 儲存 LINE User IDs 用於廣發
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            subscribed_at TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -141,3 +148,35 @@ def get_active_tickers(market):
         conn.close()
         watched = df.to_dict(orient='records')
     return {"holdings": holdings, "watched": watched}
+
+def add_user(user_id):
+    """將 LINE User ID 加入廣發清單"""
+    db_path = os.path.join(os.getcwd(), "data", "system.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    init_db(db_path)
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute("INSERT OR IGNORE INTO users (user_id, subscribed_at) VALUES (?, ?)", (user_id, today))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"add_user error: {e}")
+        return False
+
+def get_all_users():
+    """獲取所有已訂閱的 LINE User IDs"""
+    db_path = os.path.join(os.getcwd(), "data", "system.db")
+    if not os.path.exists(db_path): return []
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM users")
+        users = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return users
+    except Exception as e:
+        logger.error(f"get_all_users error: {e}")
+        return []

@@ -9,6 +9,24 @@ LINE_TOKEN = os.getenv("LINE_TOKEN")
 SCHEDULE_CONFIG = {
     "TW_RUN_TIME": "14:30",  # 台股每日執行時間 (下午 2:30)
     "US_RUN_TIME": "06:00",  # 美股每日執行時間 (早上 6:00)
+    "CRYPTO_RUN_TIME": "00:00", # 虛擬貨幣每日結算掃描
+}
+
+# --- 自動交易總控 ---
+AUTO_TRADE_ENABLED = os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true"
+
+# 每個標的的預計投入金額 (幣別依各市場為主)
+TW_TRADE_AMOUNT = int(os.getenv("TW_TRADE_AMOUNT", 100000))  # 台股每筆預設 10 萬元
+US_TRADE_AMOUNT = int(os.getenv("US_TRADE_AMOUNT", 3000))    # 美股每筆預設 3000 美金
+CRYPTO_TRADE_AMOUNT = int(os.getenv("CRYPTO_TRADE_AMOUNT", 500)) # 幣圈每筆預設 500 USDT
+
+# --- 區塊鏈策略參數 (Crypto) ---
+# 幣圈量大且全天候，我們更看重小時級別的爆發
+CRYPTO_CONFIG = {
+    "MIN_VOLUME": 1000000,      # 24H 成交量 > 100 萬 USDT
+    "SPIKE_MULTIPLIER": 2.5,    # 幣圈爆量通常更誇張，設為 2.5 倍
+    "PRICE_UP_THRESHOLD": 0.05, # 日漲幅 > 5% 才視為轉強
+    "WORKERS": 10
 }
 
 # --- 台股策略參數 (TW) ---

@@ -1,0 +1,313 @@
+2026-01-28 00:30:02,077 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 25283)
+2026-01-28 00:30:02,078 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 00:30:02,078 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 00:30:02,078 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 00:30:02,078 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 00:30:14,983 - quant_trading - INFO - 🚀 正在啟動 Trading System (台美雙系統架構)... 
+2026-01-28 00:30:15,056 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 00:30:15,056 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 00:30:15,262 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 00:30:15,263 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 00:30:15,263 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 00:30:15,263 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:cashfarm
+2026-01-28 00:30:15,264 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 00:30:15,264 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 00:30:15,266 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 00:30:15,268 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 00:30:15,268 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 00:30:15,268 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 00:30:15,858 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 00:30:15,859 - quant_trading - ERROR - ❌ 永豐金連線失敗: No module named 'shioaji'
+2026-01-28 00:30:15,898 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 00:30:17,720 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 00:31:19,557 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 00:32:15,460 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 26796)
+2026-01-28 00:32:15,462 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 00:32:15,471 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 00:32:15,472 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 00:32:15,472 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 00:32:26,084 - quant_trading - INFO - 🚀 正在啟動 Trading System (台美雙系統架構)... 
+2026-01-28 00:32:26,086 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 00:32:26,086 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 00:32:26,130 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 00:32:26,131 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 00:32:26,131 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 00:32:26,132 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:cashfarm
+2026-01-28 00:32:26,132 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 00:32:26,132 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 00:32:26,133 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 00:32:26,134 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 00:32:26,134 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 00:32:26,134 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 00:32:26,637 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 00:32:26,638 - quant_trading - ERROR - ❌ 永豐金連線失敗: No module named 'shioaji'
+2026-01-28 00:32:26,669 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 00:32:28,015 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 00:34:58,358 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 00:44:04,615 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 28711)
+2026-01-28 00:44:04,616 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 00:44:04,616 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 00:44:04,617 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 00:44:04,617 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 00:44:19,501 - quant_trading - INFO - 🚀 正在啟動 Trading System (台美雙系統架構)... 
+2026-01-28 00:44:19,518 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 00:44:19,519 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 00:44:19,607 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 00:44:19,607 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 00:44:19,607 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 00:44:19,607 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:cashfarm
+2026-01-28 00:44:19,608 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 00:44:19,609 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 00:44:19,609 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 00:44:19,609 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 00:44:19,609 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 00:44:19,610 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 00:44:20,110 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 00:44:33,340 - quant_trading - ERROR - ❌ 永豐金連線失敗: Shioaji.login() got an unexpected keyword argument 'simulation'
+2026-01-28 00:44:33,370 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 00:44:34,930 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 00:46:28,810 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 00:46:33,568 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 29143)
+2026-01-28 00:46:33,568 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 00:46:33,569 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 00:46:33,569 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 00:46:33,569 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 00:46:45,827 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 00:46:45,829 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 00:46:45,830 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 00:46:45,897 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 00:46:45,898 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 00:46:45,898 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 00:46:45,898 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:cashfarm
+2026-01-28 00:46:45,898 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 00:46:45,898 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 00:46:45,898 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 00:46:45,899 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 00:46:45,899 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 00:46:45,899 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 00:46:46,397 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 00:46:47,852 - quant_trading - ERROR - ❌ 永豐金連線失敗: Shioaji.login() got an unexpected keyword argument 'simulation'
+2026-01-28 00:46:47,897 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 00:46:49,177 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 00:46:55,370 - quant_trading - INFO - ⏰ 開始掃描 US 市場...
+2026-01-28 00:46:55,370 - quant_trading - INFO - 📥 正在抓取 S&P 500 持股...
+2026-01-28 00:46:56,104 - quant_trading - INFO - 📥 正在抓取 Russell 2000 Growth 持股...
+2026-01-28 00:46:56,960 - quant_trading - INFO - 📥 正在抓取 S&P MidCap 400 Growth 持股...
+2026-01-28 00:46:57,654 - quant_trading - INFO - 📥 正在抓取 ARK Innovation (ARKK) 持股...
+2026-01-28 00:46:58,223 - quant_trading - INFO - ✅ 美股清單綜合取得成功: 共 1025 檔關鍵成長標的
+2026-01-28 00:46:58,274 - quant_trading - INFO - 🔍 分析開始：全市場 1025 檔 + 已購庫存 5 檔 + 觀察中 15 檔
+2026-01-28 00:47:51,096 - quant_trading - INFO - ✅ US 掃描完成！買進:0 | 庫存賣出:0 | 觀察賣出:2
+2026-01-28 00:47:52,587 - quant_trading - INFO - 🤖 [機器人定型執行] 共有 0 檔訊號，將自動執行評分前 0 名標的...
+2026-01-28 00:56:31,548 - quant_trading - INFO - ⏰ 開始掃描 US 市場...
+2026-01-28 00:56:31,576 - quant_trading - INFO - 📥 正在抓取 S&P 500 持股...
+2026-01-28 00:56:32,793 - quant_trading - INFO - 📥 正在抓取 Russell 2000 Growth 持股...
+2026-01-28 00:56:33,934 - quant_trading - INFO - 📥 正在抓取 S&P MidCap 400 Growth 持股...
+2026-01-28 00:56:34,645 - quant_trading - INFO - 📥 正在抓取 ARK Innovation (ARKK) 持股...
+2026-01-28 00:56:35,072 - quant_trading - INFO - ✅ 美股清單綜合取得成功: 共 1025 檔關鍵成長標的
+2026-01-28 00:56:35,088 - quant_trading - INFO - 🔍 分析開始：全市場 1025 檔 + 已購庫存 5 檔 + 觀察中 15 檔
+2026-01-28 00:57:05,445 - quant_trading - INFO - ✅ US 掃描完成！買進:0 | 庫存賣出:0 | 觀察賣出:2
+2026-01-28 00:57:06,642 - quant_trading - INFO - 🤖 [機器人定型執行] 共有 0 檔訊號，將自動執行評分前 0 名標的...
+2026-01-28 06:01:01,916 - quant_trading - INFO - ⏰ 開始掃描 US 市場...
+2026-01-28 06:01:01,918 - quant_trading - INFO - 📥 正在抓取 S&P 500 持股...
+2026-01-28 06:01:01,926 - quant_trading - INFO - 📡 [排程] 已成功觸發 US 掃描 API
+2026-01-28 06:01:03,849 - quant_trading - INFO - 📥 正在抓取 Russell 2000 Growth 持股...
+2026-01-28 06:01:05,616 - quant_trading - INFO - 📥 正在抓取 S&P MidCap 400 Growth 持股...
+2026-01-28 06:01:06,917 - quant_trading - INFO - 📥 正在抓取 ARK Innovation (ARKK) 持股...
+2026-01-28 06:01:07,563 - quant_trading - INFO - ✅ 美股清單綜合取得成功: 共 1025 檔關鍵成長標的
+2026-01-28 06:01:07,658 - quant_trading - INFO - 🔍 分析開始：全市場 1025 檔 + 已購庫存 5 檔 + 觀察中 15 檔
+2026-01-28 06:18:03,671 - quant_trading - INFO - ✅ US 掃描完成！買進:0 | 庫存賣出:1 | 觀察賣出:2
+2026-01-28 06:18:06,634 - quant_trading - ERROR - ❌ 自動賣出 AAPL 失敗: TradingService.execute_smart_sell() got an unexpected keyword argument 'qty'
+2026-01-28 06:18:06,635 - quant_trading - INFO - 🤖 [機器人定型執行] 共有 0 檔訊號，將自動執行評分前 0 名標的...
+2026-01-28 14:43:38,123 - quant_trading - INFO - ⏰ 開始掃描 TW 市場...
+2026-01-28 14:43:38,131 - quant_trading - INFO - 📥 正在抓取台股清單...
+2026-01-28 14:43:38,148 - quant_trading - INFO -    - 正在抓取上市股票...
+2026-01-28 14:43:38,134 - quant_trading - INFO - 📡 [排程] 已成功觸發 TW 掃描 API
+2026-01-28 14:44:01,934 - quant_trading - INFO -    - 正在抓取上櫃股票...
+2026-01-28 14:44:09,862 - quant_trading - INFO - ✅ 台股清單取得成功: 共 1954 檔
+2026-01-28 14:44:09,913 - quant_trading - INFO - 🔍 分析開始：全市場 1954 檔 + 已購庫存 2 檔 + 觀察中 50 檔
+2026-01-28 15:04:35,010 - quant_trading - INFO - ✅ TW 掃描完成！買進:0 | 庫存賣出:1 | 觀察賣出:2
+2026-01-28 15:04:37,119 - quant_trading - ERROR - ❌ 自動賣出 6156.TWO 失敗: TradingService.execute_smart_sell() got an unexpected keyword argument 'qty'
+2026-01-28 15:04:37,120 - quant_trading - INFO - 🤖 [機器人定型執行] 共有 0 檔訊號，將自動執行評分前 0 名標的...
+2026-01-28 18:42:55,592 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 18:43:02,163 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 74147)
+2026-01-28 18:43:02,163 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 18:43:02,163 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 18:43:02,163 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 18:43:02,163 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 18:43:10,035 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 18:43:10,037 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 18:43:10,037 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 18:43:11,048 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 18:43:11,048 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 18:43:11,049 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 18:43:11,050 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 18:43:11,584 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 18:43:12,759 - quant_trading - ERROR - ❌ 永豐金連線失敗: Shioaji.login() got an unexpected keyword argument 'simulation'
+2026-01-28 18:43:12,774 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 18:43:13,889 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 18:45:57,072 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 18:46:01,645 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 74622)
+2026-01-28 18:46:01,645 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 18:46:01,645 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 18:46:01,646 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 18:46:01,646 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 18:46:09,408 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 18:46:09,409 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 18:46:09,410 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 18:46:09,431 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 18:46:09,431 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 18:46:09,432 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 18:46:09,433 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 18:46:09,433 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 18:46:09,433 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 18:46:09,434 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 18:46:09,434 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 18:46:09,434 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 18:46:09,434 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 18:46:09,435 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 18:46:09,939 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 18:46:09,939 - quant_trading - ERROR - ❌ 永豐金連線失敗: name 'sj' is not defined
+2026-01-28 18:46:09,959 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 18:46:12,743 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 18:47:03,272 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 18:47:06,376 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 74834)
+2026-01-28 18:47:06,376 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 18:47:06,376 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 18:47:06,376 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 18:47:06,377 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 18:47:12,993 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 18:47:13,006 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 18:47:13,006 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 18:47:13,056 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 18:47:13,057 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 18:47:13,057 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 18:47:13,058 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 18:47:13,059 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 18:47:13,059 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 18:47:13,059 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 18:47:13,059 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 18:47:13,060 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 18:47:13,060 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 18:47:13,060 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 18:47:13,193 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 18:47:15,110 - quant_trading - INFO - ✅ 永豐金證券 (Shioaji) 連線成功
+2026-01-28 18:47:15,157 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 18:47:17,218 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 18:48:05,019 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $1792.7 -> 獲利賣出價 $1846.48
+2026-01-28 19:39:41,034 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 19:39:46,784 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 81045)
+2026-01-28 19:39:46,785 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 19:39:46,787 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 19:39:46,787 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 19:39:46,788 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 19:39:57,098 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 19:39:57,100 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 19:39:57,100 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 19:39:57,332 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 19:39:57,332 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 19:39:57,333 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 19:39:57,333 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 19:39:57,333 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 19:39:57,334 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 19:39:57,334 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 19:39:57,334 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 19:39:57,334 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 19:39:57,335 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 19:39:57,336 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 19:39:57,863 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 19:40:01,269 - quant_trading - INFO - 🧪 永豐金 (Shioaji) 已啟動為 [模擬交易] 模式
+2026-01-28 19:40:01,288 - quant_trading - INFO - ✅ 永豐金證券 (Shioaji) 連線成功
+2026-01-28 19:40:01,304 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 19:40:02,654 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 19:43:16,597 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $100.0 -> 獲利賣出價 $103.0
+2026-01-28 19:48:58,744 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $100.0 -> 獲利賣出價 $103.0
+2026-01-28 19:54:57,427 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 19:55:02,196 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 83041)
+2026-01-28 19:55:02,196 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 19:55:02,197 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 19:55:02,197 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 19:55:02,197 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 19:55:09,034 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 19:55:09,035 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 19:55:09,035 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 19:55:09,095 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 19:55:09,095 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 19:55:09,095 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 19:55:09,096 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 19:55:09,096 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 19:55:09,096 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 19:55:09,096 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 19:55:09,096 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 19:55:09,097 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 19:55:09,097 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 19:55:09,097 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 19:55:09,680 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 19:55:12,384 - quant_trading - INFO - 🧪 永豐金 (Shioaji) 已啟動為 [模擬交易] 模式
+2026-01-28 19:55:12,399 - quant_trading - INFO - ✅ 永豐金證券 (Shioaji) 連線成功
+2026-01-28 19:55:12,418 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 19:55:13,450 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 19:55:35,157 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $100.0 -> 獲利賣出價 $103.0
+2026-01-28 19:57:26,843 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $100.0 -> 獲利賣出價 $103.0
+2026-01-28 19:58:51,062 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $18.0 -> 獲利賣出價 $18.54
+2026-01-28 19:59:54,121 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $110.0 -> 獲利賣出價 $113.3
+2026-01-28 20:02:57,819 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 20:03:01,071 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 84230)
+2026-01-28 20:03:01,072 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 20:03:01,074 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 20:03:01,074 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 20:03:01,074 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 20:03:06,455 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 20:03:06,457 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 20:03:06,458 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 20:03:06,596 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 20:03:06,596 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 20:03:06,597 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 20:03:06,598 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 20:03:06,598 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 20:03:07,166 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 20:03:09,865 - quant_trading - INFO - 🧪 永豐金 (Shioaji) 已啟動為 [模擬交易] 模式
+2026-01-28 20:03:09,875 - quant_trading - INFO - ✅ 永豐金連線成功 | 模式: 【模擬交易】 | 帳號: 2738137
+2026-01-28 20:03:09,892 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 20:03:10,910 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 20:04:00,693 - quant_trading - INFO - 👋 正在關閉 Trading System...
+2026-01-28 20:04:03,421 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 84443)
+2026-01-28 20:04:03,422 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-28 20:04:03,422 - quant_trading - INFO -    - 台股 (TW): 每天 14:30
+2026-01-28 20:04:03,422 - quant_trading - INFO -    - 美股 (US): 每天 06:00
+2026-01-28 20:04:03,422 - quant_trading - INFO -    - 區塊鏈 (Crypto): 每天 00:00
+2026-01-28 20:04:10,660 - quant_trading - INFO - 🚀 正在啟動 Trading System (定型自動化交易版)... 
+2026-01-28 20:04:10,664 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-28 20:04:10,668 - quant_trading - INFO - 🔄 嘗試連線至 IBKR [模擬交易] 127.0.0.1:7497
+2026-01-28 20:04:10,732 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm.nj
+2026-01-28 20:04:10,732 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:hfarm
+2026-01-28 20:04:10,732 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfuture
+2026-01-28 20:04:10,733 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usopt.nj
+2026-01-28 20:04:10,733 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:eufarmnj
+2026-01-28 20:04:10,733 - quant_trading - INFO - 💡 IBKR 狀態更新 (2104): Market data farm connection is OK:usfarm
+2026-01-28 20:04:10,733 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:euhmds
+2026-01-28 20:04:10,733 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:apachmds
+2026-01-28 20:04:10,734 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:fundfarm
+2026-01-28 20:04:10,734 - quant_trading - INFO - 💡 IBKR 狀態更新 (2106): HMDS data farm connection is OK:ushmds
+2026-01-28 20:04:10,734 - quant_trading - WARNING - ⚠️ IBKR Error 2158: Sec-def data farm connection is OK:secdefhk (ReqId: -1)
+2026-01-28 20:04:11,213 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-28 20:04:14,222 - quant_trading - INFO - 🧪 永豐金 (Shioaji) 已啟動為 [模擬交易] 模式
+2026-01-28 20:04:14,226 - quant_trading - INFO - ✅ 永豐金連線成功 | 模式: 【模擬交易】 | 帳號: 2738137
+2026-01-28 20:04:14,251 - quant_trading - INFO - 🧪 OKX 已啟動為 [模擬交易] 模式
+2026-01-28 20:04:19,920 - quant_trading - ERROR - ❌ 區塊鏈系統連線失敗 (okx): okx {"msg":"Invalid OK-ACCESS-KEY","code":"50111"}
+2026-01-28 20:05:18,247 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $110.0 -> 獲利賣出價 $113.3
+2026-01-28 20:08:42,006 - quant_trading - WARNING - ⚠️ IBKR Error 10167: Requested market data is not subscribed. Displaying delayed market data. (ReqId: 64)
+2026-01-28 20:08:42,662 - quant_trading - INFO - 🎯 建立掛單點位: 買入價 $424.88 -> 獲利賣出價 $437.63
+2026-01-28 20:14:04,044 - quant_trading - INFO - 👋 正在關閉 Trading System...

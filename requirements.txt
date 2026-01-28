@@ -21,4 +21,6 @@ diagrams
 tradingview-ta
 pandas_ta
 python-multipart
+tradingview_ta
+shioaji
 # ta-lib # 需要手動安裝系統依賴 brew install ta-lib

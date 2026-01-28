@@ -1,0 +1,49 @@
+2026-01-24 19:56:31,260 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 49976)
+2026-01-24 19:56:31,260 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-24 19:56:31,260 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-24 19:56:31,260 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-24 19:58:32,485 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 50290)
+2026-01-24 19:58:32,485 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-24 19:58:32,485 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-24 19:58:32,485 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-24 20:03:17,508 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 51011)
+2026-01-24 20:03:17,508 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-24 20:03:17,508 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-24 20:03:17,509 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-24 20:05:59,398 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 52989)
+2026-01-24 20:05:59,399 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-24 20:05:59,399 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-24 20:05:59,399 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-24 20:06:26,160 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 53395)
+2026-01-24 20:06:26,160 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-24 20:06:26,160 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-24 20:06:26,160 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-24 20:40:43,106 - quant_trading - INFO - 🚀 Trading System Scheduler Started (PID: 57997)
+2026-01-24 20:40:43,106 - quant_trading - INFO - 📅 排程設定已載入:
+2026-01-24 20:40:43,106 - quant_trading - INFO -    - 台股 (TW): 每天 14:30 執行
+2026-01-24 20:40:43,107 - quant_trading - INFO -    - 美股 (US): 每天 06:00 執行
+2026-01-24 20:40:44,799 - quant_trading - INFO - 🚀 正在啟動 Trading System (台美雙系統架構)... 
+2026-01-24 20:40:44,800 - quant_trading - INFO - 🧵 IB 背景執行緒已啟動
+2026-01-24 20:40:44,801 - quant_trading - INFO - 🔄 嘗試連線至 IBKR (執行緒隔離模式) 127.0.0.1:7497
+2026-01-24 20:40:44,802 - quant_trading - ERROR - ❌ 連線 IBKR 失敗: [Errno 61] Connect call failed ('127.0.0.1', 7497)
+2026-01-24 21:24:53,568 - quant_trading - INFO - 🔄 嘗試連線至 IBKR (執行緒隔離模式) 127.0.0.1:7497
+2026-01-24 21:24:53,582 - quant_trading - ERROR - ❌ 連線 IBKR 失敗: [Errno 61] Connect call failed ('127.0.0.1', 7497)
+2026-01-25 06:00:01,030 - quant_trading - INFO - ⏰ 開始掃描 US 市場...
+2026-01-25 06:00:01,143 - quant_trading - INFO - 📥 正在從 BlackRock 抓取 S&P 500 (IVV) 持股清單...
+2026-01-25 06:15:24,290 - quant_trading - INFO - ✅ 美股清單取得: 503 檔 (來源: BlackRock iShares)
+2026-01-25 06:15:24,317 - quant_trading - INFO - 🔍 分析開始：全市場 503 檔 + 已購庫存 5 檔 + 觀察中 12 檔
+2026-01-25 06:15:39,611 - quant_trading - INFO - ✅ US 掃描完成！買進:2 | 庫存賣出:1 | 觀察賣出:2
+2026-01-25 11:30:41,974 - quant_trading - INFO - 🔄 嘗試連線至 IBKR (執行緒隔離模式) 127.0.0.1:7497
+2026-01-25 11:30:42,873 - quant_trading - INFO - ✅ 成功連線至 IBKR (已開啟延遲行情)
+2026-01-25 11:30:44,332 - quant_trading - INFO - ⚠️ 券商無法獲取 AAPL 有效行情，嘗試 yfinance 備援...
+2026-01-25 11:31:13,491 - quant_trading - INFO - 🎯 建立 Bracket Order: 買入價 $235.23 -> 獲利賣出價 $242.29
+2026-01-25 14:38:29,572 - quant_trading - INFO - ⏰ 開始掃描 TW 市場...
+2026-01-25 14:38:29,789 - quant_trading - INFO - 📥 正在抓取台股清單...
+2026-01-25 14:38:29,817 - quant_trading - INFO -    - 正在抓取上市股票...
+2026-01-25 14:38:30,191 - quant_trading - ERROR - ❌ 抓取上市清單時發生錯誤: HTTPSConnectionPool(host='isin.twse.com.tw', port=443): Max retries exceeded with url: /isin/C_public.jsp?strMode=2 (Caused by NameResolutionError("HTTPSConnection(host='isin.twse.com.tw', port=443): Failed to resolve 'isin.twse.com.tw' ([Errno 8] nodename nor servname provided, or not known)"))
+2026-01-25 14:38:30,194 - quant_trading - INFO -    - 正在抓取上櫃股票...
+2026-01-25 14:38:30,243 - quant_trading - ERROR - ❌ 抓取上櫃清單時發生錯誤: HTTPSConnectionPool(host='isin.twse.com.tw', port=443): Max retries exceeded with url: /isin/C_public.jsp?strMode=4 (Caused by NameResolutionError("HTTPSConnection(host='isin.twse.com.tw', port=443): Failed to resolve 'isin.twse.com.tw' ([Errno 8] nodename nor servname provided, or not known)"))
+2026-01-25 14:38:30,243 - quant_trading - ERROR - ❌ 台股清單抓取失敗，結果為空
+2026-01-25 14:38:30,415 - quant_trading - INFO - 🔍 分析開始：全市場 0 檔 + 已購庫存 2 檔 + 觀察中 24 檔
+2026-01-25 14:38:30,418 - quant_trading - INFO - ✅ TW 掃描完成！買進:0 | 庫存賣出:0 | 觀察賣出:0
+2026-01-26 00:15:12,353 - quant_trading - INFO - 👋 正在關閉 Trading System...

@@ -1,0 +1,1 @@
+[E 2026-01-28 18:48:05,053 /Users/chenrobert/Documents/code_life/python-server-cmp/venv/lib/python3.12/site-packages/shioaji/shioaji.py:435:place_order] {'status': {'status_code': 406}, 'response': {'detail': 'Account Not Acceptable.'}}

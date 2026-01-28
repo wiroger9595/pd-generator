@@ -6,18 +6,17 @@ class TradingService:
     def __init__(self, broker_manager: BrokerManager):
         self.ib_handler = broker_manager # 為了相容性暫時保留變數名，實際指向管理器
 
-    async def execute_smart_buy(self, symbol, quantity, discount_pct=0.015, profit_target_pct=None, force_broker=None):
+    async def execute_smart_buy(self, symbol, quantity, discount_pct=0.015, profit_target_pct=None, force_broker=None, custom_entry=None, custom_tp=None):
         """
         『智慧進場』邏輯：
-        1. 自動獲取現價 (IB 優先，yfinance 備援)
-        2. 計算低買點 (Limit Buy)
-        3. 如果有 profit_target_pct，則同時掛出高賣點 (Bracket Order)
+        1. 自動獲取現價
+        2. 計算低買點 (優先使用技術面建議點位)
+        3. 掛出高賣點 (Bracket Order)
         """
         import yfinance as yf
         import math
         current_price = await self.ib_handler.get_market_price(symbol, force_broker=force_broker)
         
-        # 修正：如果 IB 抓不到或回傳 nan (無訂閱/休市)，強制觸發 yfinance 備援
         is_invalid = current_price is None or math.isnan(current_price) or current_price <= 0
         
         if is_invalid:
@@ -31,14 +30,17 @@ class TradingService:
         if not current_price or math.isnan(current_price):
             return {"error": f"無法獲取 '{symbol}' 的現價。請檢查代號是否正確"}
         
-        # 計算買入限價
-        limit_buy_price = round(current_price * (1 - discount_pct), 2)
+        # 優先使用技術面提供的精確點位
+        limit_buy_price = custom_entry if custom_entry else round(current_price * (1 - discount_pct), 2)
         
         take_profit_price = None
-        if profit_target_pct:
-            # 基於『買入價』來計算獲利賣出價
+        if custom_tp:
+            take_profit_price = custom_tp
+        elif profit_target_pct:
             take_profit_price = round(limit_buy_price * (1 + profit_target_pct), 2)
-            logger.info(f"🎯 建立 Bracket Order: 買入價 ${limit_buy_price} -> 獲利賣出價 ${take_profit_price}")
+            
+        if take_profit_price:
+            logger.info(f"🎯 建立掛單點位: 買入價 ${limit_buy_price} -> 獲利賣出價 ${take_profit_price}")
 
         # 最終防線：確保結果中不含 nan
         if math.isnan(limit_buy_price) or (take_profit_price and math.isnan(take_profit_price)):
@@ -60,9 +62,26 @@ class TradingService:
         """
         『高點賣出』邏輯：
         支援一般限價賣出與追蹤止損賣出。
+        quantity=0 時代表『全平倉』
         """
         import yfinance as yf
         import math
+
+        # 如果 qty=0，自動抓取現有部位
+        if quantity <= 0:
+            broker = self.ib_handler.get_broker(symbol, force_broker)
+            positions = await broker.get_positions()
+            target_pos = next((p for p in positions if str(p.get('symbol', '')).upper() in str(symbol).upper()), None)
+            
+            if not target_pos:
+                return {"error": f"目前並未持有 {symbol}，無法執行全平倉。"}
+            
+            quantity = target_pos.get('position') or target_pos.get('total')
+            if not quantity or quantity <= 0:
+                return {"error": f"持有數量異常: {quantity}"}
+            
+            logger.info(f"📊 [全平倉] 偵測到持倉 {symbol} 數量: {quantity}")
+
         current_price = await self.ib_handler.get_market_price(symbol, force_broker=force_broker)
         
         is_invalid = current_price is None or math.isnan(current_price) or current_price <= 0

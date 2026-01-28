@@ -9,6 +9,8 @@ class CrossAnalyzer:
     def __init__(self):
         self.yf = YFinanceProvider()
         self.tv = TradingViewProvider()
+        from .fmp_provider import FMPProvider
+        self.fmp = FMPProvider()
 
     async def analyze_symbol(self, symbol):
         """
@@ -31,8 +33,13 @@ class CrossAnalyzer:
             tw_data = FinMindProvider()
             prof_task = loop.run_in_executor(None, tw_data.get_institutional_investors, symbol)
         else:
-            from trading.app import app
-            prof_task = app.state.broker_manager.get_analyst_forecast(symbol)
+            # 美股使用 FMP (優先) 與 IBKR (備援)
+            async def get_us_prof():
+                fmp_data = await loop.run_in_executor(None, self.fmp.get_analyst_estimates, symbol)
+                growth = await loop.run_in_executor(None, self.fmp.get_growth_metrics, symbol)
+                rating = await loop.run_in_executor(None, self.fmp.get_company_rating, symbol)
+                return {"fmp_estimates": fmp_data, "growth": growth, "rating": rating}
+            prof_task = get_us_prof()
         
         results = await asyncio.gather(quote_task, analysis_task, history_task, prof_task)
         
@@ -63,11 +70,25 @@ class CrossAnalyzer:
         # 專業領域加分
         if is_tw and prof_data: # 台股：法人買賣
             if prof_data.get("recent_3d_net", 0) > 0: score += 1
-        elif not is_tw and prof_data: # 美股：分析師預測
-            if prof_data.get("analyst_rating", 3) <= 2: score += 1
+        elif not is_tw and prof_data: # 美股：FMP 數據分析
+            # 1. 目標價空間
+            est = prof_data.get("fmp_estimates")
+            if est and est.get("estimatedTargetPrice"):
+                upside = (est["estimatedTargetPrice"] - current_p) / current_p
+                if upside > 0.15: score += 1 # 空間 > 15%
+            
+            # 2. 成長性 (EPS 增長)
+            growth = prof_data.get("growth")
+            if growth and growth.get("eps_growth", 0) > 0.1: # EPS 成長 > 10%
+                score += 1
+            
+            # 3. 綜合評等
+            rat = prof_data.get("rating")
+            if rat and "BUY" in rat.get("ratingRecommendation", ""):
+                score += 1
 
-        if score >= 2: recommendation = "BUY"
-        elif score >= 4: recommendation = "STRONG_BUY"
+        if score >= 3: recommendation = "BUY" # 分數要求提高確保品質
+        elif score >= 5: recommendation = "STRONG_BUY"
         elif score <= -1: recommendation = "SELL"
 
         return {

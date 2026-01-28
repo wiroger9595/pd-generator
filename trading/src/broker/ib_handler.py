@@ -1,18 +1,36 @@
 import os
 import asyncio
 import threading
-from ib_insync import IB, Stock, MarketOrder, LimitOrder
+from ib_insync import IB, Stock, MarketOrder, LimitOrder, Order
 from .base import BaseBroker
 from src.utils.logger import logger
+import re
+import xml.etree.ElementTree as ET
 
 class IBHandler(BaseBroker):
     def __init__(self, host='127.0.0.1', port=7497, client_id=1):
         self.host = host
         self.port = port
         self.client_id = client_id
+        self.is_sim = os.getenv("US_IS_SIMULATION", "false").lower() == "true"
         self.ib = IB()
+        self.ib.errorEvent += self.on_error # 註冊錯誤處理
         self._loop = None
         self._thread = None
+
+    def on_error(self, req_id, error_code, error_string, contract):
+        """
+        過濾 IBKR 常見的非致命資訊錯誤 (例如連線閃斷、數據伺服器重連)
+        """
+        # 1100: 連線丟失, 1102: 連線恢復, 2104-2108: 數據伺服器連線狀態
+        ignored_codes = {1100, 1102, 2104, 2105, 2106, 2107, 2108}
+        
+        if error_code in ignored_codes:
+            # 使用 DEBUG 或 INFO 記錄，避免混淆真正的程式錯誤
+            logger.info(f"💡 IBKR 狀態更新 ({error_code}): {error_string}")
+        else:
+            # 真正的錯誤則保留原本的警告層級
+            logger.warning(f"⚠️ IBKR Error {error_code}: {error_string} (ReqId: {req_id})")
 
     def _run_loop(self):
         """在獨立執行緒中啟動專屬的 Event Loop"""
@@ -29,7 +47,8 @@ class IBHandler(BaseBroker):
 
     async def get_market_price(self, symbol):
         """獲取最新即時價格"""
-        await self.connect() # 確保已連線
+        if not await self.connect():
+            return None
         
         contract = Stock(symbol, 'SMART', 'USD')
         # 送往背景執行緒
@@ -42,9 +61,13 @@ class IBHandler(BaseBroker):
         # 請求市場數據
         self.ib.reqMktData(qualified[0], '', False, False)
         # 等待數據更新
-        await asyncio.sleep(1) 
+        await asyncio.sleep(1.5) 
         ticker = self.ib.ticker(qualified[0])
         price = ticker.last if ticker.last > 0 else ticker.close
+        
+        # 關鍵修復：取得價格後立即取消訂閱，避免 10197 競爭衝突
+        self.ib.cancelMktData(qualified[0])
+        
         return price
 
     async def connect(self):
@@ -52,7 +75,8 @@ class IBHandler(BaseBroker):
         self.start() # 確保執行緒在跑
         
         if not self.ib.isConnected():
-            logger.info(f"🔄 嘗試連線至 IBKR (執行緒隔離模式) {self.host}:{self.port}")
+            mode_str = "[模擬交易]" if self.is_sim else "[正式交易]"
+            logger.info(f"🔄 嘗試連線至 IBKR {mode_str} {self.host}:{self.port}")
             try:
                 # 關鍵：將任務送到專屬執行緒的 loop 執行
                 future = asyncio.run_coroutine_threadsafe(
@@ -76,22 +100,22 @@ class IBHandler(BaseBroker):
             self.ib.disconnect()
 
     async def get_account_summary(self):
-        await self.connect()
-        if not self.ib.isConnected(): return None
+        if not await self.connect():
+            return None
         return [dict(tag=v.tag, value=v.value, currency=v.currency) 
                 for v in self.ib.accountSummary() if v.tag in ['NetLiquidation', 'TotalCashValue', 'BuyingPower']]
 
     async def get_positions(self):
-        await self.connect()
-        if not self.ib.isConnected(): return []
+        if not await self.connect():
+            return []
         return [{"symbol": p.contract.symbol, "position": p.position, "avg_cost": p.avgCost} for p in self.ib.positions()]
 
     async def get_analyst_forecast(self, symbol):
         """
         獲取 IBKR 內建的專業分析師預測報告 (Institutional Data)
         """
-        await self.connect()
-        if not self.ib.isConnected(): return None
+        if not await self.connect():
+            return None
         
         contract = Stock(symbol, 'SMART', 'USD')
         # 使用同步版本的 qualifyContracts 在異步包裝中確保合約有效
@@ -103,7 +127,6 @@ class IBHandler(BaseBroker):
             data_xml = self.ib.reqFundamentalData(contract, reportType='RESC')
             if not data_xml: return None
             
-            import xml.etree.ElementTree as ET
             root = ET.fromstring(data_xml)
             target_p = root.find(".//Consensus[@Type='TargetPrice']/Mean")
             rating = root.find(".//Consensus[@Type='Rating']/Mean")
@@ -117,17 +140,13 @@ class IBHandler(BaseBroker):
             logger.error(f"IB Fundamental Data Error: {e}")
             return None
 
-from ib_insync import IB, Stock, MarketOrder, LimitOrder, TrailingStopOrder
-# ... (其餘 import 不變)
-
     async def place_order(self, symbol, action, quantity, order_type='MARKET', price=None, take_profit=None, trailing_percent=None):
         """
         下單邏輯：支援普通、Bracket 與 Trailing Stop 訂單
         """
-        if not self.ib.isConnected():
-            await self.connect()
+        if not await self.connect():
+            return {"error": "IB TWS 沒開啟"}
         
-        import re
         if re.match(r'^\d+$', str(symbol)):
             contract = Stock(symbol, 'TSE', 'TWD')
         else:
@@ -140,7 +159,7 @@ from ib_insync import IB, Stock, MarketOrder, LimitOrder, TrailingStopOrder
 
         # 1. 處理普通追蹤止損 (獨立單)
         if trailing_percent and not take_profit:
-            order = TrailingStopOrder(action, quantity, trailingPercent=trailing_percent, outsideRth=True)
+            order = Order(action=action, totalQuantity=quantity, orderType='TRAIL', trailingPercent=trailing_percent, outsideRth=True)
             trade = self.ib.placeOrder(contract, order)
             return {"status": "Trailing Stop Submitted", "trailing_percent": trailing_percent, "order_id": trade.order.orderId}
 

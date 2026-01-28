@@ -14,9 +14,10 @@ class ShioajiHandler(BaseBroker):
     async def connect(self):
         if self.is_connected: return True
         try:
-            # 延遲匯入，避免沒安裝套件就報錯
             import shioaji as sj
-            self.api = sj.Shioaji()
+            # 延遲匯入，避免沒安裝套件就報錯
+            is_sim = os.getenv("TW_IS_SIMULATION", "false").lower() == "true"
+            self.api = sj.Shioaji(simulation=is_sim)
             
             api_key = os.getenv("SHIOAJI_API_KEY")
             secret_key = os.getenv("SHIOAJI_SECRET_KEY")
@@ -29,11 +30,16 @@ class ShioajiHandler(BaseBroker):
 
             self.api.login(api_key, secret_key)
             
+            if is_sim:
+                logger.info("🧪 永豐金 (Shioaji) 已啟動為 [模擬交易] 模式")
+
             if cert_path and os.path.exists(cert_path):
                 self.api.activate_ca(cert_path, cert_pass, cert_path)
             
             self.is_connected = True
-            logger.info("✅ 永豐金證券 (Shioaji) 連線成功")
+            mode_label = "【模擬交易】" if is_sim else "【🔥實盤交易】"
+            acc_id = self.api.stock_account.account_id if self.api.stock_account else "未知"
+            logger.info(f"✅ 永豐金連線成功 | 模式: {mode_label} | 帳號: {acc_id}")
             return True
         except Exception as e:
             logger.error(f"❌ 永豐金連線失敗: {e}")
