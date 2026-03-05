@@ -1,11 +1,7 @@
-import yfinance as yf
+from src.data.data_service import DataService
 
 def fetch_history(ticker):
-    """取得最近 3 個月的日線資料"""
-    try:
-        stock = yf.Ticker(ticker)
-        # 加上 auto_adjust=True 修復除權息造成的缺口
-        df = stock.history(period="3mo", auto_adjust=True)
-        return df
-    except Exception:
-        return None
+    """取得最近 3 個月的日線資料 (Using DataService)"""
+    ds = DataService()
+    # 90 days approx 3 months
+    return ds.get_history(ticker, days=90)

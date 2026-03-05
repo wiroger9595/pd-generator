@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+
+# Environment variables
+.env
+
+# Python build and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environments
+venv/
+env/
+ENV/
+.venv/
+
+# PyCharm
+.idea/
+
+# OS Specific
+.DS_Store
+
+# Logs and PID files
+logs/
+server.pid
+*.log
+
+# Sensitive Data
+data/
+*.db
+facebook_cookies.txt
+
+# Generated Files
+generated_diagrams/
+
+# Deployment specifics
+deploy.sh
+Dockerfile
+Procfile

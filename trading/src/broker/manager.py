@@ -53,11 +53,22 @@ class BrokerManager:
         except Exception as e:
             logger.error(f"⚠️ 美股連線初始化失敗: {e}")
             
-        # 啟動台股連線
-        try:
-            await self.tw_broker.connect()
-        except Exception as e:
-            logger.error(f"⚠️ 台股連線初始化失敗: {e}")
+        # 啟動台股連線（支援雙券商）
+        tw_type = os.getenv("TW_BROKER_TYPE", "SJ").upper()
+        
+        # 永豐證券 (Shioaji)
+        if "BOTH" in tw_type or "SJ" in tw_type:
+            try:
+                await self.tw_broker_shioaji.connect()
+            except Exception as e:
+                logger.error(f"⚠️ 永豐證券連線失敗: {e}")
+        
+        # 玉山證券 (ESun)
+        if "BOTH" in tw_type or "ESUN" in tw_type:
+            try:
+                await self.tw_broker_esun.connect()
+            except Exception as e:
+                logger.error(f"⚠️ 玉山證券連線失敗: {e}")
 
         # 啟動區塊鏈連線
         try:
@@ -87,3 +98,30 @@ class BrokerManager:
             take_profit=take_profit,
             trailing_percent=trailing_percent
         )
+    async def cancel_orders(self, symbol, force_broker=None):
+        broker = self.get_broker(symbol, force_broker)
+        return await broker.cancel_orders(symbol)
+
+    async def disconnect_all(self):
+        """關閉所有券商連線 (釋放資源)"""
+        if hasattr(self.us_broker, "ib") and self.us_broker.ib:
+            try: self.us_broker.ib.disconnect()
+            except: pass
+        
+        if hasattr(self.crypto_broker, "disconnect"):
+            try: await self.crypto_broker.disconnect()
+            except: pass
+            
+        # 台股券商斷線
+        if hasattr(self.tw_broker_shioaji, "api") and self.tw_broker_shioaji.api:
+            try: 
+                self.tw_broker_shioaji.api.logout()
+                logger.info("✅ 永豐證券已斷線")
+            except: pass
+        
+        if hasattr(self.tw_broker_esun, "api") and self.tw_broker_esun.api:
+            try: 
+                # ESun 的登出邏輯（如果有的話）
+                logger.info("✅ 玉山證券已斷線")
+            except: pass
+

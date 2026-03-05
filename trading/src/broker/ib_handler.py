@@ -32,18 +32,24 @@ class IBHandler(BaseBroker):
             # 真正的錯誤則保留原本的警告層級
             logger.warning(f"⚠️ IBKR Error {error_code}: {error_string} (ReqId: {req_id})")
 
+    def start(self):
+        """啟動背後執行緒"""
+        if self._thread is None or not self._thread.is_alive():
+            self._loop_ready = threading.Event()
+            self._thread = threading.Thread(target=self._run_loop, daemon=True)
+            self._thread.start()
+            # 等待執行緒中的 loop 初始化完成
+            if not self._loop_ready.wait(timeout=5.0):
+                logger.error("❌ IB 背景執行緒 Loop 初始化超時")
+            else:
+                logger.info("🧵 IB 背景執行緒已啟動並就緒")
+
     def _run_loop(self):
         """在獨立執行緒中啟動專屬的 Event Loop"""
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
+        self._loop_ready.set()
         self._loop.run_forever()
-
-    def start(self):
-        """啟動背後執行緒"""
-        if self._thread is None or not self._thread.is_alive():
-            self._thread = threading.Thread(target=self._run_loop, daemon=True)
-            self._thread.start()
-            logger.info("🧵 IB 背景執行緒已啟動")
 
     async def get_market_price(self, symbol):
         """獲取最新即時價格"""
@@ -99,46 +105,86 @@ class IBHandler(BaseBroker):
         if self.ib and self.ib.isConnected():
             self.ib.disconnect()
 
+    async def get_market_scanner_results(self, scan_code='TOP_PERCENT_GAIN', num_rows=25):
+        """[專業級] 調裝 IBKR 伺服器端掃描器 (Thread-Safe)"""
+        if not await self.connect(): return []
+        from ib_insync import ScannerSubscription, TagValue
+        sub = ScannerSubscription(instrument='STK', locationCode='STK.US.MAJOR', scanCode=scan_code)
+        filter_tags = [TagValue('priceAbove', '5'), TagValue('volumeAbove', '500000')]
+        try:
+            future = asyncio.run_coroutine_threadsafe(self.ib.reqScannerDataAsync(sub, filter_tags), self._loop)
+            scan_results = await asyncio.wrap_future(future)
+            return [res.contractDetails.contract.symbol for res in scan_results[:num_rows]]
+        except Exception as e:
+            logger.error(f"IBKR 掃描 {scan_code} 失敗: {e}")
+            return []
+
     async def get_account_summary(self):
-        if not await self.connect():
-            return None
+        if not await self.connect(): return None
         return [dict(tag=v.tag, value=v.value, currency=v.currency) 
                 for v in self.ib.accountSummary() if v.tag in ['NetLiquidation', 'TotalCashValue', 'BuyingPower']]
 
     async def get_positions(self):
-        if not await self.connect():
-            return []
+        if not await self.connect(): return []
         return [{"symbol": p.contract.symbol, "position": p.position, "avg_cost": p.avgCost} for p in self.ib.positions()]
 
-    async def get_analyst_forecast(self, symbol):
-        """
-        獲取 IBKR 內建的專業分析師預測報告 (Institutional Data)
-        """
-        if not await self.connect():
-            return None
-        
-        contract = Stock(symbol, 'SMART', 'USD')
-        # 使用同步版本的 qualifyContracts 在異步包裝中確保合約有效
-        future = asyncio.run_coroutine_threadsafe(self.ib.qualifyContractsAsync(contract), self._loop)
-        await asyncio.wrap_future(future)
-        
-        # 請求解析後的分析師預測報告 (Report Type: RESC)
+    async def get_historical_data(self, symbol, duration='3 M', bar_size='1 day'):
+        """[核心功能] 直接抓取 IB 數據，含代號修正與 Thread-Safe"""
+        if not await self.connect(): return None
         try:
-            data_xml = self.ib.reqFundamentalData(contract, reportType='RESC')
+            # 代號修正: BRKB -> BRK B, BF.B -> BF B
+            ib_symbol = symbol.replace('.',' ').replace('-',' ')
+            if ib_symbol == 'BRKB': ib_symbol = 'BRK B'
+            
+            contract = Stock(ib_symbol, 'SMART', 'USD')
+            future = asyncio.run_coroutine_threadsafe(
+                self.ib.reqHistoricalDataAsync(contract, '', duration, bar_size, 'TRADES', True), self._loop
+            )
+            bars = await asyncio.wrap_future(future)
+            if not bars: return None
+            import pandas as pd
+            df = pd.DataFrame([{'Date': b.date, 'Open': b.open, 'High': b.high, 'Low': b.low, 'Close': b.close, 'Volume': b.volume} for b in bars])
+            df.set_index('Date', inplace=True)
+            df.columns = [c.capitalize() for c in df.columns]
+            return df
+        except Exception as e:
+            logger.error(f"IB 歷史數據抓取失敗 ({symbol}): {e}")
+            return None
+
+    async def get_orders(self):
+        """獲取 IB 所有未成交掛單"""
+        if not await self.connect(): return []
+        trades = self.ib.openTrades()
+        return [{"symbol": t.contract.symbol, "status": t.status.status, "action": t.order.action} for t in trades]
+
+    async def get_analyst_forecast(self, symbol):
+        """[專家數據] 獲取機構評等與目標價 (Thread-Safe)"""
+        if not await self.connect(): return None
+        try:
+            ib_symbol = symbol.replace('.',' ').replace('-',' ')
+            if ib_symbol == 'BRKB': ib_symbol = 'BRK B'
+            
+            contract = Stock(ib_symbol, 'SMART', 'USD')
+            f_qualify = asyncio.run_coroutine_threadsafe(self.ib.qualifyContractsAsync(contract), self._loop)
+            qualified = await asyncio.wrap_future(f_qualify)
+            if not qualified: return None
+            
+            # 使用 Async 請求基本面數據，避免 Loop 衝突
+            future = asyncio.run_coroutine_threadsafe(
+                self.ib.reqFundamentalDataAsync(qualified[0], reportType='RESC'), self._loop
+            )
+            data_xml = await asyncio.wrap_future(future)
             if not data_xml: return None
             
+            import xml.etree.ElementTree as ET
             root = ET.fromstring(data_xml)
             target_p = root.find(".//Consensus[@Type='TargetPrice']/Mean")
             rating = root.find(".//Consensus[@Type='Rating']/Mean")
-            
             return {
-                "target_price": float(target_p.text) if target_p is not None else "N/A",
-                "analyst_rating": float(rating.text) if rating is not None else "N/A",
-                "source": "Wall Street Analysts (via IB)"
+                "target_price": float(target_p.text) if target_p is not None else None,
+                "analyst_rating": float(rating.text) if rating is not None else None
             }
-        except Exception as e:
-            logger.error(f"IB Fundamental Data Error: {e}")
-            return None
+        except: return None
 
     async def place_order(self, symbol, action, quantity, order_type='MARKET', price=None, take_profit=None, trailing_percent=None):
         """
@@ -152,19 +198,64 @@ class IBHandler(BaseBroker):
         else:
             contract = Stock(symbol, 'SMART', 'USD')
 
+
         future = asyncio.run_coroutine_threadsafe(self.ib.qualifyContractsAsync(contract), self._loop)
         qualified_contracts = await asyncio.wrap_future(future)
         if not qualified_contracts: return {"error": f"找不到符號: {symbol}"}
         contract = qualified_contracts[0]
 
-        # 1. 處理普通追蹤止損 (獨立單)
+        # 1. 處理追蹤止損限價 (Trailing Stop Limit) - 獨立單
         if trailing_percent and not take_profit:
-            order = Order(action=action, totalQuantity=quantity, orderType='TRAIL', trailingPercent=trailing_percent, outsideRth=True)
+            from ib_insync import TrailStopOrder
+            # TrailStopLimitOrder: 更精確的追蹤止損（避免市價滑價）
+            order = TrailStopOrder(
+                action=action, 
+                totalQuantity=quantity, 
+                trailPercent=trailing_percent * 100,  # IB 需要百分比格式 (例如 2% = 2)
+                auxPrice=0.05,  # 限價觸發後的價格偏移量
+                outsideRth=True
+            )
             trade = self.ib.placeOrder(contract, order)
-            return {"status": "Trailing Stop Submitted", "trailing_percent": trailing_percent, "order_id": trade.order.orderId}
+            return {
+                "status": "Trailing Stop Limit Submitted", 
+                "trailing_percent": trailing_percent, 
+                "order_id": trade.order.orderId
+            }
 
-        # 2. 處理 Bracket Order (含獲利+止損)
-        if take_profit and action.upper() == 'BUY':
+        # 2. 處理市價買入 + 追蹤止損限價賣出組合 (美股專用)
+        if take_profit and action.upper() == 'BUY' and order_type.upper() == 'MARKET':
+            from ib_insync import MarketOrder, TrailStopOrder
+            
+            # 父單：市價買入
+            parent = MarketOrder('BUY', quantity)
+            parent.orderId = self.ib.client.getReqId()
+            parent.transmit = False  # 等待子單一起送出
+            parent.outsideRth = True
+            
+            # 子單：追蹤止損限價賣出（默認追蹤跌幅 2%）
+            trail_pct = trailing_percent if trailing_percent else 0.02
+            profit_order = TrailStopOrder(
+                'SELL', 
+                quantity, 
+                trailPercent=trail_pct * 100,
+                auxPrice=0.05,
+                outsideRth=True
+            )
+            profit_order.parentId = parent.orderId
+            profit_order.transmit = True  # 最後一單，送出
+            
+            self.ib.placeOrder(contract, parent)
+            self.ib.placeOrder(contract, profit_order)
+            
+            return {
+                "status": "Submitted Market Buy + Trailing Stop",
+                "order_type": "MARKET",
+                "trailing_percent": trail_pct,
+                "order_id": parent.orderId
+            }
+
+        # 3. 處理限價買入 + 限價賣出 Bracket Order（原有邏輯）
+        elif take_profit and action.upper() == 'BUY':
             parent = LimitOrder('BUY', quantity, price, outsideRth=True)
             parent.orderId = self.ib.client.getReqId()
             parent.transmit = False 
@@ -183,7 +274,7 @@ class IBHandler(BaseBroker):
                 "order_id": parent.orderId
             }
         
-        # 3. 處理普通限價/市價單
+        # 4. 處理普通限價/市價單
         else:
             if order_type.upper() == 'MARKET':
                 order = MarketOrder(action, quantity)
@@ -192,3 +283,18 @@ class IBHandler(BaseBroker):
             
             trade = self.ib.placeOrder(contract, order)
             return {"order_id": trade.order.orderId, "status": trade.orderStatus.status, "symbol": symbol, "action": action, "quantity": quantity}
+    async def cancel_orders(self, symbol):
+        """取消特定代號的所有未成交掛單"""
+        if not await self.connect(): return
+        
+        # 尋找所有未成交的交易
+        trades = self.ib.openTrades()
+        count = 0
+        for t in trades:
+            if t.contract.symbol.upper() == symbol.upper():
+                self.ib.cancelOrder(t.order)
+                count += 1
+        
+        if count > 0:
+            logger.info(f"🚫 [IB] 已取消 {symbol} 共有 {count} 筆未成交單")
+        return count

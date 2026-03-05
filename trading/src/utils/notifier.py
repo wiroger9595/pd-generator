@@ -29,7 +29,11 @@ def get_line_bot_configs():
 
 def format_stock_info(s):
     price_info = f"${s['price']}" if 'price' in s else "N/A"
-    return f"• {s['name']} ({s['ticker']})\n  現價: {price_info} | {s['reason']}\n"
+    # 新結構：reason 在 buy_points 或 sell_reason 中
+    reason = s.get('buy_points', {}).get('reason', '') or s.get('sell_reason', '') or '技術訊號'
+    score = s.get('buy_points', {}).get('score', 0)
+    score_info = f" (評分:{int(score)})" if score > 0 else ""
+    return f"• {s['name']} ({s['ticker']})\n  現價: {price_info}{score_info} | {reason}\n"
 
 def send_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[]):
     """發送結合 買進 與 賣出 建議的 LINE 通知"""

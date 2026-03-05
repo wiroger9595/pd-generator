@@ -92,3 +92,78 @@ Mac: brew install graphviz
 Windows: 下載安裝包並將 bin 加入 PATH
 
 Linux: sudo apt-get install graphviz
+
+
+
+Stock Data Integration Walkthrough
+I have successfully integrated multiple stock data sources to enhance the reliability of your trading system's data fetching and reporting logic.
+
+Changes Overview
+1. New Data Providers (
+src/data/data_providers.py
+)
+Implemented a flexible provider system supporting:
+
+US Stocks:
+Polygon.io (Priority 1)
+Alpha Vantage (Priority 2)
+Tiingo (Priority 3)
+Yahoo Finance (Fallback)
+TW Stocks:
+FinMind (Priority 1)
+Yahoo Finance (Fallback)
+2. Unified Data Service (
+src/data/data_service.py
+)
+Created 
+DataService
+ class to manage providers and automatic fallback logic.
+Intelligent routing based on ticker format (e.g., 2330 -> TW, AAPL -> US).
+3. Integrated into Trading System
+TradingService (
+src/services/trading_service.py
+): Now uses 
+DataService
+ for price checking fallback instead of direct yfinance calls.
+CrossAnalyzer (
+src/data/analyzer.py
+): Updated to use 
+DataService
+ for basic quotes and history.
+App (
+app.py
+): Initialized 
+DataService
+ and injected it into services.
+Fetcher (
+src/stock/fetcher.py
+): Updated 
+fetch_history
+ to use the unified service.
+Configuration
+IMPORTANT
+
+You need to add the following keys to your .env file to enable the new providers:
+
+ALPHA_VANTAGE_API_KEY=your_key
+POLYGON_API_KEY=your_key
+TIINGO_API_KEY=your_key
+FINMIND_API_KEY=your_key
+Verification
+I created a test script 
+tests/test_data_providers.py
+ to verify the fallback logic.
+
+How to Run Tests
+export PYTHONPATH=$PYTHONPATH:.
+python3 tests/test_data_providers.py
+Manual Testing
+You can test via Line commands:
+
+分析 AAPL (Will try Polygon -> Alpha -> Tiingo -> Yahoo)
+分析 2330 (Will try FinMind -> Yahoo)
+
+Comment
+⌥⌘M
+
+Tasks

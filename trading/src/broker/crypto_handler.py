@@ -110,6 +110,27 @@ class CryptoHandler(BaseBroker):
         except:
             return []
 
+    async def cancel_orders(self, symbol):
+        """取消特定代號的所有未成交掛單"""
+        if not await self.connect(): return 0
+        try:
+            clean_symbol = symbol.upper()
+            if "/" not in clean_symbol and clean_symbol.endswith("USDT"):
+                clean_symbol = f"{clean_symbol[:-4]}/USDT"
+            
+            # 獲取掛單
+            orders = await self.exchange.fetch_open_orders(clean_symbol)
+            count = 0
+            for o in orders:
+                await self.exchange.cancel_order(o['id'], clean_symbol)
+                count += 1
+            if count > 0:
+                logger.info(f"🚫 [CCXT] 已取消 {clean_symbol} 共有 {count} 筆未成交單")
+            return count
+        except Exception as e:
+            logger.error(f"Crypto 撤單失敗: {e}")
+            return 0
+
     async def disconnect(self):
         if self.exchange:
             await self.exchange.close()

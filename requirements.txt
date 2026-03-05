@@ -1,7 +1,6 @@
 # Common
 numpy
 pandas
-yfinance
 fastapi
 uvicorn
 python-dotenv

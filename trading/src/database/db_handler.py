@@ -35,7 +35,7 @@ def init_db(db_path):
             market TEXT
         )
     """)
-    # 3. 建立掃描結果表 (Scan Results)
+    # 3. 建立掃描結果表 (Scan Results) - 支援新的綜合策略
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scan_results (
             ticker TEXT,
@@ -43,7 +43,9 @@ def init_db(db_path):
             price REAL,
             reason TEXT,
             date TEXT,
-            market TEXT
+            market TEXT,
+            is_buy INTEGER DEFAULT 0,
+            score REAL DEFAULT 0
         )
     """)
     # 4. 建立用戶表 (Users) - 儲存 LINE User IDs 用於廣發
@@ -66,9 +68,22 @@ def save_to_db(results, market):
     init_db(db_path)
     conn = sqlite3.connect(db_path)
     try:
-        df = pd.DataFrame(results)
-        df['date'] = today_str
-        df['market'] = market.upper()
+        # 處理新的資料結構 (buy_points 是嵌套字典)
+        flattened = []
+        for r in results:
+            flat = {
+                'ticker': r['ticker'],
+                'name': r['name'],
+                'price': r['price'],
+                'reason': r.get('buy_points', {}).get('reason', ''),
+                'date': today_str,
+                'market': market.upper(),
+                'is_buy': 1 if r.get('is_buy') else 0,
+                'score': r.get('buy_points', {}).get('score', 0)
+            }
+            flattened.append(flat)
+        
+        df = pd.DataFrame(flattened)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM scan_results WHERE date = ?", (today_str,))
         df.to_sql('scan_results', conn, if_exists='append', index=False)

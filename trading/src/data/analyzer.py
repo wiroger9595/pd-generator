@@ -1,13 +1,13 @@
-from .yfinance_adapt import YFinanceProvider
 from .tv_adapt import TradingViewProvider
+from src.data.data_service import DataService
 import asyncio
 
 class CrossAnalyzer:
     """
     交叉分析中心：整合不同來源的拼圖
     """
-    def __init__(self):
-        self.yf = YFinanceProvider()
+    def __init__(self, data_service: DataService = None):
+        self.data_service = data_service or DataService()
         self.tv = TradingViewProvider()
         from .fmp_provider import FMPProvider
         self.fmp = FMPProvider()
@@ -22,10 +22,15 @@ class CrossAnalyzer:
         is_tw = re.match(r'^\d+$', str(symbol))
         
         # 1. 基礎數據 (不分市場)
-        quote_symbol = f"{symbol}.TW" if is_tw else symbol
-        quote_task = loop.run_in_executor(None, self.yf.get_realtime_quote, quote_symbol)
+        # 1. 基礎數據 (不分市場)
+        # quote_symbol = f"{symbol}.TW" if is_tw else symbol # DataService handles this
+        
+        # Use DataService for quote and history
+        # run_in_executor might be needed if DataService is synchronous request based
+        
+        quote_task = loop.run_in_executor(None, self.data_service.get_quote, symbol)
         analysis_task = loop.run_in_executor(None, self.tv.get_realtime_quote, symbol)
-        history_task = loop.run_in_executor(None, self.yf.get_history, quote_symbol, "1mo")
+        history_task = loop.run_in_executor(None, self.data_service.get_history, symbol, 30) # 1mo ~ 30 days
         
         # 2. 專業數據分流
         if is_tw:
@@ -46,14 +51,21 @@ class CrossAnalyzer:
         quote, tv_signal, history, prof_data = results
 
         if not quote: return {"error": "無法獲取基本報價"}
+        if history is None or len(history) < 20: 
+            return {"symbol": symbol, "recommendation": "HOLD", "score": 0, "reason": "資料不足無法深度分析"}
 
         # --- 技術面計算 ---
         import pandas_ta as ta
         current_p = quote['price']
-        bb = ta.bbands(history['Close'], length=20, std=2)
-        lower_band = round(bb.iloc[-1][0], 2)
-        upper_band = round(bb.iloc[-1][2], 2)
-        rsi = ta.rsi(history['Close'], length=14).iloc[-1]
+        try:
+            bb = ta.bbands(history['Close'], length=20, std=2)
+            if bb is None or len(bb) == 0: raise ValueError("BBands failed")
+            lower_band = round(bb.iloc[-1][0], 2)
+            upper_band = round(bb.iloc[-1][2], 2)
+            rsi_series = ta.rsi(history['Close'], length=14)
+            rsi = rsi_series.iloc[-1] if rsi_series is not None else 50
+        except:
+            return {"symbol": symbol, "recommendation": "HOLD", "score": 0}
         
         # --- 交叉分析積分 ---
         recommendation = "HOLD"

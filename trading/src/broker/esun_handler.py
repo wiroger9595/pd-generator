@@ -109,3 +109,9 @@ class ESunHandler(BaseBroker):
             return self.api.get_inventory(self.account)
         except:
             return []
+
+    async def cancel_orders(self, symbol):
+        """取消委託單 (玉山實作)"""
+        if not await self.connect(): return 0
+        logger.warning(f"目前玉山證券 Handler 尚未完整實作撤單邏輯，請手動處理 {symbol}")
+        return 0

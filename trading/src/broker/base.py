@@ -16,3 +16,7 @@ class BaseBroker(ABC):
     @abstractmethod
     async def get_positions(self):
         pass
+
+    @abstractmethod
+    async def cancel_orders(self, symbol):
+        pass

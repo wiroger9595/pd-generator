@@ -5,7 +5,6 @@ import math
 import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Body, Request, BackgroundTasks
-import yfinance as yf
 
 # 策略與核心模組
 from src.engine.backtester import VectorizedBacktester
@@ -22,6 +21,7 @@ from src.services.scanner_service import run_scan
 from src.utils.notifier import send_combined_report
 from src.utils.logger import logger
 from src.data.analyzer import CrossAnalyzer
+from src.data.data_service import DataService
 
 # LINE Bot 相關
 from linebot.v3.webhook import WebhookParser
@@ -32,8 +32,12 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from config import SCHEDULE_CONFIG
+
 # 必須在最前面套用
-nest_asyncio.apply()
+# nest_asyncio.apply() # Disabled to fix uvicorn loop conflict
 
 # --- 配置 ---
 LINE_CHANNEL_SECRETS = [s.strip() for s in os.getenv("LINE_CHANNEL_SECRET", "").split(",") if s.strip()]
@@ -66,13 +70,42 @@ async def lifespan(app: FastAPI):
         "client_id": int(os.getenv("IB_CLIENT_ID", 10))
     }
     app.state.broker_manager = BrokerManager(ib_params)
-    app.state.trading_service = TradingService(app.state.broker_manager)
-    app.state.analyzer = CrossAnalyzer()
+    app.state.data_service = DataService()
+    app.state.trading_service = TradingService(app.state.broker_manager, app.state.data_service)
+    app.state.analyzer = CrossAnalyzer(app.state.data_service)
+    
+    # 啟動排程器
+    scheduler = AsyncIOScheduler()
+    
+    async def scheduled_scan(market):
+        logger.info(f"⏰ 排程觸發: {market} 掃描")
+        await run_scan(market, app.state.trading_service)
+
+    # TW Scan
+    tw_time = SCHEDULE_CONFIG.get("TW_RUN_TIME", "14:30")
+    th, tm = tw_time.split(":")
+    scheduler.add_job(scheduled_scan, CronTrigger(hour=th, minute=tm), args=["tw"], id="scan_tw")
+    
+    # US Scan
+    us_time = SCHEDULE_CONFIG.get("US_RUN_TIME", "06:00")
+    uh, um = us_time.split(":")
+    scheduler.add_job(scheduled_scan, CronTrigger(hour=uh, minute=um), args=["us"], id="scan_us")
+    
+    # Crypto Scan
+    c_time = SCHEDULE_CONFIG.get("CRYPTO_RUN_TIME", "00:00")
+    ch, cm = c_time.split(":")
+    scheduler.add_job(scheduled_scan, CronTrigger(hour=ch, minute=cm), args=["crypto"], id="scan_crypto")
+
+    scheduler.start()
+    app.state.scheduler = scheduler
+    logger.info(f"📅 排程器已啟動: TW({tw_time}), US({us_time}), Crypto({c_time})")
+
     await app.state.broker_manager.connect_all()
     yield
     logger.info("👋 正在關閉 Trading System...")
-    if hasattr(app.state.broker_manager.us_broker, "ib"):
-        app.state.broker_manager.us_broker.ib.disconnect()
+    await app.state.broker_manager.disconnect_all()
+    if hasattr(app.state, "scheduler"):
+        app.state.scheduler.shutdown()
 
 app = FastAPI(title="Trading System API", lifespan=lifespan)
 
@@ -118,8 +151,36 @@ async def handle_message(event):
         return # 處理完畢直接結束
 
     if hasattr(event.source, 'user_id'): add_user(event.source.user_id)
-
-    if cmd in ["餘額", "WALLET"]:
+    
+    # 🔹 訂單狀態查詢 (所有用戶可用)
+    if cmd in ["訂單", "委託", "ORDERS", "查單"] or txt.startswith("查單 "):
+        try:
+            # 提取股票代號（如果有）
+            symbol_filter = parts[1] if len(parts) > 1 else None
+            
+            service = app.state.trading_service
+            # 獲取永豐證券訂單
+            orders_sj = await service.ib_handler.tw_broker_shioaji.get_orders() if hasattr(service.ib_handler, 'tw_broker_shioaji') else []
+            
+            # 過濾指定股票
+            if symbol_filter:
+                orders_sj = [o for o in orders_sj if o.get('symbol') == symbol_filter]
+            
+            if not orders_sj:
+                reply_text = f"📋 目前無委託單" + (f" ({symbol_filter})" if symbol_filter else "")
+            else:
+                msg_lines = [f"📋 委託單列表 ({len(orders_sj)} 筆):"]
+                for o in orders_sj[:10]:  # 最多顯示10筆
+                    status_emoji = "✅" if o['status'] in ["Filled", "完全成交"] else "⏳" if o['status'] in ["Submitted", "委託中", "PendingSubmit", "PreSubmitted"] else "❌"
+                    action_text = "買進" if "Buy" in str(o['action']) else "賣出"
+                    msg_lines.append(
+                        f"{status_emoji} {o['symbol']} | {action_text} {o['qty']}股 @ ${o['price']} | {o['status']}"
+                    )
+                reply_text = "\n".join(msg_lines)
+        except Exception as e:
+            reply_text = f"❌ 查詢訂單失敗: {e}"
+    
+    elif cmd in ["餘額", "WALLET"]:
         try:
             broker = app.state.broker_manager.crypto_broker
             balances = await broker.get_positions()
@@ -194,10 +255,32 @@ async def handle_message(event):
                 if result and "error" not in result:
                     limit_p = result.get('computed_buy_price')
                     tp_p = result.get('computed_take_profit')
-                    reply_text = (f"🚀 {broker_name} 限價買單成功！\n代號：{ticker} (數量:{qty})\n"
+                    order_id = result.get('order_id', '未取得')
+                    
+                    reply_text = (f"🚀 {broker_name} 限價買單已送出！\n"
+                                 f"📌 代號：{ticker} (數量:{qty})\n"
                                  f"🔹 買入限價：${limit_p}\n"
-                                 f"🔸 獲利賣價：${tp_p or '未設定'}")
-                    record_buy("TW" if "台股" in broker_name else ("Crypto" if "區塊鏈" in broker_name else "US"), ticker, ticker, limit_p)
+                                 f"🔸 獲利賣價：${tp_p or '未設定'}\n"
+                                 f"🆔 訂單號：{order_id}\n\n"
+                                 f"⚠️ 請等待成交確認，可發送『訂單』查詢狀態")
+                    
+                    # 獲取股票名稱（嘗試從市場數據獲取，失敗則使用代號）
+                    stock_name = ticker
+                    try:
+                        if "台股" in broker_name:
+                            from src.stock.crawler import get_tw_stock_list
+                            tw_stocks = get_tw_stock_list()
+                            stock_info = next((s for s in tw_stocks if s['ticker'] == ticker), None)
+                            if stock_info: stock_name = stock_info['name']
+                        elif "美股" in broker_name:
+                            # 移除直接呼叫 yfinance 的寫法
+                            stock_name = ticker
+                    except: pass
+                    
+                    # 記錄到持倉資料庫
+                    market_code = "TW" if "台股" in broker_name else ("Crypto" if "區塊鏈" in broker_name else "US")
+                    record_buy(market_code, ticker, stock_name, limit_p, qty)
+                    logger.info(f"✅ 已記錄買入持倉: {stock_name} ({ticker}) x{qty} @ ${limit_p}")
                 else: reply_text = f"❌ {broker_name} 下單失敗：{result.get('error', '未知錯誤')}"
             else:
                 if trail_pct:
@@ -231,6 +314,15 @@ async def test_auto_trade(market: str):
     if market not in ['tw', 'us', 'crypto']: raise HTTPException(status_code=400, detail="Invalid market")
     result = await run_scan(market, app.state.trading_service)
     return {"status": "success", "market": market.upper(), "summary": {"buy_signals": len(result.get("buy", [])), "top_n_executed": 5}, "executed_data": result}
+        
+@app.get("/api/test/scheduler")
+async def get_scheduler_jobs():
+    """查看目前排程任務"""
+    if not hasattr(app.state, "scheduler"): return {"error": "Scheduler not initialized"}
+    jobs = []
+    for job in app.state.scheduler.get_jobs():
+        jobs.append({"id": job.id, "next_run": str(job.next_run_time)})
+    return {"jobs": jobs}
 
 @app.post("/api/robot/trade")
 async def robot_trade_selected(background_tasks: BackgroundTasks, payload: dict = Body(...)):
@@ -271,4 +363,4 @@ async def robot_trade_selected(background_tasks: BackgroundTasks, payload: dict 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8002, loop="asyncio")
+    uvicorn.run("app:app", host="0.0.0.0", port=8002)

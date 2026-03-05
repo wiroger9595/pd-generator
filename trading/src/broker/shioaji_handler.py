@@ -45,6 +45,27 @@ class ShioajiHandler(BaseBroker):
             logger.error(f"❌ 永豐金連線失敗: {e}")
             return False
 
+    async def get_orders(self):
+        """獲取帳戶委託單列表"""
+        await self.connect()
+        trades = self.api.list_trades()
+        return [{"symbol": t.contract.symbol, "action": t.order.action, "price": t.order.price, "qty": t.order.quantity, "status": t.status.status} for t in trades]
+
+    async def cancel_orders(self, symbol):
+        """取消特定代號的永豐金未成交掛單"""
+        await self.connect()
+        trades = self.api.list_trades()
+        count = 0
+        for t in trades:
+            # 僅取消狀態為可撤銷的單
+            if t.contract.symbol == symbol and t.status.status in ["PendingSubmit", "PreSubmitted", "Submitted"]:
+                self.api.cancel_order(t)
+                count += 1
+        
+        if count > 0:
+            logger.info(f"🚫 [SJ] 已取消 {symbol} 共有 {count} 筆未成交單")
+        return count
+
     async def get_market_price(self, symbol):
         await self.connect()
         # 台股通常使用 Ticker 抓取
@@ -55,7 +76,7 @@ class ShioajiHandler(BaseBroker):
             return snapshot.close
         except: return None
 
-    async def place_order(self, symbol, action, quantity, order_type, price=None, **kwargs):
+    async def place_order(self, symbol, action, quantity, order_type, price=None, take_profit=None, trailing_percent=None, **kwargs):
         await self.connect()
         try:
             import re
@@ -70,17 +91,78 @@ class ShioajiHandler(BaseBroker):
             
             side = sj.constant.Action.Buy if action.upper() == "BUY" else sj.constant.Action.Sell
             
-            # 台美股下單物件略有不同，此處根據 SJ 最新規範
-            order = self.api.Order(
-                price=price,
-                quantity=int(quantity),
-                action=side,
-                price_type=sj.constant.StockPriceType.LMT,
-                order_type=sj.constant.OrderType.ROD
-            )
-            trade = self.api.place_order(contract, order)
-            return {"status": "Success", "order_id": trade.order.id, "symbol": symbol}
+            # 1. 處理 Bracket Order：限價買入 + 追蹤止損限價賣出
+            if take_profit and action.upper() == "BUY" and trailing_percent:
+                logger.info(f"🎯 永豐證券 Bracket Order: 限價買入 ${price} + 追蹤止損 {trailing_percent*100:.1f}%")
+                
+                # 主單：限價買入
+                buy_order = self.api.Order(
+                    price=price,
+                    quantity=int(quantity),
+                    action=sj.constant.Action.Buy,
+                    price_type=sj.constant.StockPriceType.LMT,
+                    order_type=sj.constant.OrderType.ROD
+                )
+                buy_trade = self.api.place_order(contract, buy_order)
+                
+                # 注意：Shioaji 不支持像 IB 一樣的自動附加子單
+                # 需要在買單成交後手動建立追蹤止損單
+                # 這裡先送出買單，追蹤止損單可以通過監聽成交回報後再送出
+                
+                logger.warning("⚠️ 永豐證券需在買單成交後手動建立追蹤止損單")
+                return {
+                    "status": "Submitted (Buy Only)",
+                    "order_id": buy_trade.order.id,
+                    "symbol": symbol,
+                    "note": "追蹤止損需在成交後手動設置"
+                }
+            
+            # 2. 處理 Bracket Order：限價買入 + 限價賣出
+            elif take_profit and action.upper() == "BUY":
+                logger.info(f"🎯 永豐證券 Bracket Order: 限價買入 ${price} + 限價賣出 ${take_profit}")
+                
+                # 主單：限價買入
+                buy_order = self.api.Order(
+                    price=price,
+                    quantity=int(quantity),
+                    action=sj.constant.Action.Buy,
+                    price_type=sj.constant.StockPriceType.LMT,
+                    order_type=sj.constant.OrderType.ROD
+                )
+                buy_trade = self.api.place_order(contract, buy_order)
+                
+                # 獲利單：限價賣出（立即送出，OCO 邏輯需手動管理）
+                sell_order = self.api.Order(
+                    price=take_profit,
+                    quantity=int(quantity),
+                    action=sj.constant.Action.Sell,
+                    price_type=sj.constant.StockPriceType.LMT,
+                    order_type=sj.constant.OrderType.ROD
+                )
+                sell_trade = self.api.place_order(contract, sell_order)
+                
+                return {
+                    "status": "Submitted Bracket",
+                    "buy_order_id": buy_trade.order.id,
+                    "sell_order_id": sell_trade.order.id,
+                    "symbol": symbol,
+                    "note": "買賣單已同時送出"
+                }
+            
+            # 3. 處理普通限價/市價單
+            else:
+                pt = sj.constant.StockPriceType.LMT if price else sj.constant.StockPriceType.MKT
+                order = self.api.Order(
+                    price=price,
+                    quantity=int(quantity),
+                    action=side,
+                    price_type=pt,
+                    order_type=sj.constant.OrderType.ROD
+                )
+                trade = self.api.place_order(contract, order)
+                return {"status": "Success", "order_id": trade.order.id, "symbol": symbol}
         except Exception as e:
+            logger.error(f"❌ 永豐下單失敗: {e}")
             return {"error": str(e)}
 
     async def get_positions(self):
