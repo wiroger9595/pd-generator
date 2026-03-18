@@ -18,7 +18,7 @@ watchfiles
 watchdog
 diagrams
 tradingview-ta
-pandas_ta
+pandas-ta
 python-multipart
 tradingview_ta
 shioaji
