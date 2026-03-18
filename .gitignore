@@ -175,7 +175,8 @@ Thumbs.db
 # ---------------------------------------------
 logs/
 server.pid
-data/
+trading/data/
+!trading/src/data/
 generated_diagrams/
 facebook_cookies.txt
 shioaji.log
