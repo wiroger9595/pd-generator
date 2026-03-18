@@ -7,9 +7,13 @@ LINE_TOKEN = os.getenv("LINE_TOKEN")
 
 
 SCHEDULE_CONFIG = {
-    "TW_RUN_TIME": "14:30",  # 台股每日執行時間 (下午 2:30)
-    "US_RUN_TIME": "06:00",  # 美股每日執行時間 (早上 6:00)
-    "CRYPTO_RUN_TIME": "00:00", # 虛擬貨幣每日結算掃描
+    "TW_RUN_TIME": "14:30",          # 台股每日執行時間 (下午 2:30)
+    "US_RUN_TIME": "06:00",          # 美股每日執行時間 (早上 6:00)
+    "CRYPTO_RUN_TIME": "00:00",      # 虛擬貨幣每日結算掃描
+    "DAILY_ANALYSIS_US_TIME": "06:47",  # 美股買進分析 → LINE
+    "SELL_SCAN_US_TIME":      "07:17",  # 美股賣出掃描 → LINE
+    "DAILY_ANALYSIS_TW_TIME": "14:47",  # 台股買進分析 → LINE
+    "SELL_SCAN_TW_TIME":      "15:17",  # 台股賣出掃描 → LINE
 }
 
 # --- 自動交易總控 ---

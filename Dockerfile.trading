@@ -1,0 +1,35 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 安裝系統依賴 + TA-Lib C 函式庫
+RUN apt-get update && apt-get install -y \
+    wget build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -q https://github.com/ta-lib/ta-lib/releases/download/v0.4.0/ta-lib-0.4.0-src.tar.gz \
+    && tar -xzf ta-lib-0.4.0-src.tar.gz \
+    && cd ta-lib \
+    && ./configure --prefix=/usr \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
+
+WORKDIR /app
+
+# 先複製 requirements 以利快取
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir TA-Lib APScheduler
+
+# 複製整個專案
+COPY . .
+
+# 切換到 trading 子目錄執行
+WORKDIR /app/trading
+
+EXPOSE 8002
+
+CMD uvicorn app:app --host 0.0.0.0 --port ${PORT:-8002}

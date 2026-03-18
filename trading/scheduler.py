@@ -17,21 +17,40 @@ def trigger_scan_via_api(market):
     except Exception as e:
         logger.error(f"❌ [排程] 連線至 API 失敗: {e}")
 
+def trigger_daily_analysis_via_api(market: str):
+    """透過 API 觸發每日分析 (美股或台股 → LINE)"""
+    try:
+        url = f"http://127.0.0.1:8002/api/daily-analysis/{market}"
+        res = requests.post(url, timeout=5)
+        if res.status_code == 200:
+            logger.info(f"📡 [排程] 已成功觸發每日{market.upper()}分析 API")
+        else:
+            logger.error(f"❌ [排程] 觸發每日{market.upper()}分析 API 失敗: {res.status_code}")
+    except Exception as e:
+        logger.error(f"❌ [排程] 連線至每日分析 API 失敗: {e}")
+
+
 def start_scheduler():
     """啟動排程任務"""
     tw_time = SCHEDULE_CONFIG.get("TW_RUN_TIME", "14:35")
     us_time = SCHEDULE_CONFIG.get("US_RUN_TIME", "06:15")
     crypto_time = SCHEDULE_CONFIG.get("CRYPTO_RUN_TIME", "00:00")
+    da_us_time = SCHEDULE_CONFIG.get("DAILY_ANALYSIS_US_TIME", "07:00")
+    da_tw_time = SCHEDULE_CONFIG.get("DAILY_ANALYSIS_TW_TIME", "15:00")
 
     logger.info(f"🚀 Trading System Scheduler Started (PID: {os.getpid()})")
     logger.info(f"📅 排程設定已載入:")
     logger.info(f"   - 台股 (TW): 每天 {tw_time}")
     logger.info(f"   - 美股 (US): 每天 {us_time}")
     logger.info(f"   - 區塊鏈 (Crypto): 每天 {crypto_time}")
+    logger.info(f"   - 每日美股分析 (Daily US): 每天 {da_us_time}")
+    logger.info(f"   - 每日台股分析 (Daily TW): 每天 {da_tw_time}")
 
     schedule.every().day.at(tw_time).do(trigger_scan_via_api, "tw")
     schedule.every().day.at(us_time).do(trigger_scan_via_api, "us")
     schedule.every().day.at(crypto_time).do(trigger_scan_via_api, "crypto")
+    schedule.every().day.at(da_us_time).do(trigger_daily_analysis_via_api, "us")
+    schedule.every().day.at(da_tw_time).do(trigger_daily_analysis_via_api, "tw")
 
     while True:
         try:

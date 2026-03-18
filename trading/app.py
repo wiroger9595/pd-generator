@@ -74,31 +74,84 @@ async def lifespan(app: FastAPI):
     app.state.trading_service = TradingService(app.state.broker_manager, app.state.data_service)
     app.state.analyzer = CrossAnalyzer(app.state.data_service)
     
-    # 啟動排程器
-    scheduler = AsyncIOScheduler()
-    
-    async def scheduled_scan(market):
-        logger.info(f"⏰ 排程觸發: {market} 掃描")
-        await run_scan(market, app.state.trading_service)
+    # 內部排程器：僅本機使用，雲端 (DISABLE_SCHEDULER=true) 由外部 cron 呼叫
+    if os.getenv("DISABLE_SCHEDULER", "false").lower() != "true":
+        scheduler = AsyncIOScheduler()
 
-    # TW Scan
-    tw_time = SCHEDULE_CONFIG.get("TW_RUN_TIME", "14:30")
-    th, tm = tw_time.split(":")
-    scheduler.add_job(scheduled_scan, CronTrigger(hour=th, minute=tm), args=["tw"], id="scan_tw")
-    
-    # US Scan
-    us_time = SCHEDULE_CONFIG.get("US_RUN_TIME", "06:00")
-    uh, um = us_time.split(":")
-    scheduler.add_job(scheduled_scan, CronTrigger(hour=uh, minute=um), args=["us"], id="scan_us")
-    
-    # Crypto Scan
-    c_time = SCHEDULE_CONFIG.get("CRYPTO_RUN_TIME", "00:00")
-    ch, cm = c_time.split(":")
-    scheduler.add_job(scheduled_scan, CronTrigger(hour=ch, minute=cm), args=["crypto"], id="scan_crypto")
+        async def scheduled_scan(market):
+            logger.info(f"⏰ 排程觸發: {market} 掃描")
+            await run_scan(market, app.state.trading_service)
 
-    scheduler.start()
-    app.state.scheduler = scheduler
-    logger.info(f"📅 排程器已啟動: TW({tw_time}), US({us_time}), Crypto({c_time})")
+        tw_time = SCHEDULE_CONFIG.get("TW_RUN_TIME", "14:30")
+        th, tm = tw_time.split(":")
+        scheduler.add_job(scheduled_scan, CronTrigger(hour=th, minute=tm), args=["tw"], id="scan_tw")
+
+        us_time = SCHEDULE_CONFIG.get("US_RUN_TIME", "06:00")
+        uh, um = us_time.split(":")
+        scheduler.add_job(scheduled_scan, CronTrigger(hour=uh, minute=um), args=["us"], id="scan_us")
+
+        c_time = SCHEDULE_CONFIG.get("CRYPTO_RUN_TIME", "00:00")
+        ch, cm = c_time.split(":")
+        scheduler.add_job(scheduled_scan, CronTrigger(hour=ch, minute=cm), args=["crypto"], id="scan_crypto")
+
+        async def scheduled_daily_analysis_us():
+            from src.services.recommendation_service import get_provider_recommendations
+            from src.utils.notifier import send_combined_report
+            logger.info("⏰ 排程觸發: 每日美股分析")
+            us_merged: dict = {}
+            for provider_name in ["polygon", "alpha_vantage", "tiingo"]:
+                result = await get_provider_recommendations(provider_name, top_n=10, max_scan=20)
+                if result.get("status") != "success":
+                    continue
+                for rec in result.get("recommendations", []):
+                    ticker = rec["ticker"]
+                    if ticker not in us_merged:
+                        us_merged[ticker] = {**rec, "provider_count": 1, "providers": [provider_name]}
+                    else:
+                        us_merged[ticker]["score"] = max(us_merged[ticker]["score"], rec["score"]) + 15
+                        us_merged[ticker]["provider_count"] += 1
+                        us_merged[ticker]["providers"].append(provider_name)
+            top = sorted(us_merged.values(), key=lambda x: x["score"], reverse=True)[:5]
+            buy_list = [{"ticker": r["ticker"], "name": r.get("name", r["ticker"]), "price": r["price"],
+                         "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")}} for r in top]
+            send_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
+
+        async def scheduled_daily_analysis_tw():
+            from src.services.recommendation_service import get_tw_recommendations
+            from src.utils.notifier import send_combined_report
+            logger.info("⏰ 排程觸發: 每日台股分析")
+            result = await get_tw_recommendations(top_n=5, max_scan=30)
+            recs = result.get("recommendations", [])
+            buy_list = [{"ticker": r["ticker"], "name": r.get("name", r["ticker"]), "price": r["price"],
+                         "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")}} for r in recs]
+            send_combined_report("台股 (FinMind)", buy_list, [], [])
+
+        async def scheduled_sell_scan(market):
+            from src.services.recommendation_service import get_sell_recommendations
+            logger.info(f"⏰ 排程觸發: {market.upper()} 賣出掃描")
+            await get_sell_recommendations(market)
+
+        da_us_time = SCHEDULE_CONFIG.get("DAILY_ANALYSIS_US_TIME", "06:47")
+        dah, dam = da_us_time.split(":")
+        scheduler.add_job(scheduled_daily_analysis_us, CronTrigger(hour=dah, minute=dam), id="daily_analysis_us")
+
+        da_tw_time = SCHEDULE_CONFIG.get("DAILY_ANALYSIS_TW_TIME", "14:47")
+        dah, dam = da_tw_time.split(":")
+        scheduler.add_job(scheduled_daily_analysis_tw, CronTrigger(hour=dah, minute=dam), id="daily_analysis_tw")
+
+        sell_us_time = SCHEDULE_CONFIG.get("SELL_SCAN_US_TIME", "07:17")
+        suh, sum_ = sell_us_time.split(":")
+        scheduler.add_job(scheduled_sell_scan, CronTrigger(hour=suh, minute=sum_), args=["us"], id="sell_scan_us")
+
+        sell_tw_time = SCHEDULE_CONFIG.get("SELL_SCAN_TW_TIME", "15:17")
+        sth, stm = sell_tw_time.split(":")
+        scheduler.add_job(scheduled_sell_scan, CronTrigger(hour=sth, minute=stm), args=["tw"], id="sell_scan_tw")
+
+        scheduler.start()
+        app.state.scheduler = scheduler
+        logger.info("📅 內部排程器已啟動（本機模式）")
+    else:
+        logger.info("📅 內部排程器已停用（DISABLE_SCHEDULER=true），由外部 cron 負責觸發")
 
     await app.state.broker_manager.connect_all()
     yield
@@ -108,6 +161,11 @@ async def lifespan(app: FastAPI):
         app.state.scheduler.shutdown()
 
 app = FastAPI(title="Trading System API", lifespan=lifespan)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 
 @app.post("/callback")
 async def callback(request: Request):
@@ -323,6 +381,176 @@ async def get_scheduler_jobs():
     for job in app.state.scheduler.get_jobs():
         jobs.append({"id": job.id, "next_run": str(job.next_run_time)})
     return {"jobs": jobs}
+
+@app.get("/api/test/provider/{provider_name}")
+async def test_individual_provider(provider_name: str, symbol: str = Query("AAPL")):
+    """測試個別 API Provider 是否正常運作"""
+    provider_name = provider_name.lower().replace("-", "_")
+    
+    from src.data.data_providers import AlphaVantageProvider, PolygonProvider, TiingoProvider, FinMindProvider
+    import time
+    
+    p_map = {
+        "alpha_vantage": AlphaVantageProvider,
+        "polygon": PolygonProvider,
+        "tiingo": TiingoProvider,
+        "finmind": FinMindProvider
+    }
+    
+    if provider_name not in p_map:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider_name}. Use one of {list(p_map.keys())}")
+        
+    provider_class = p_map[provider_name]
+    provider_inst = provider_class()
+    
+    try:
+        start_time = time.time()
+        df = provider_inst.get_history(symbol, days=5)
+        cost_time = time.time() - start_time
+        
+        if df is not None and not df.empty:
+            # Convert timestamp index to string format for JSON serialization
+            df_reset = df.reset_index()
+            if 'Date' in df_reset.columns:
+                df_reset['Date'] = df_reset['Date'].dt.strftime('%Y-%m-%d')
+                
+            records = df_reset.to_dict(orient="records")
+            return {
+                "status": "success",
+                "provider": provider_name,
+                "symbol": symbol,
+                "time_cost_seconds": round(cost_time, 3),
+                "data_length": len(records),
+                "sample_data": records[:2]
+            }
+        else:
+            return {
+                "status": "failed",
+                "provider": provider_name,
+                "symbol": symbol,
+                "reason": "No data returned (possibly rate limited, invalid symbol, or API key issue)",
+                "time_cost_seconds": round(cost_time, 3)
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "provider": provider_name,
+            "symbol": symbol,
+            "error": str(e)
+        }
+
+@app.get("/api/recommend/{provider_name}")
+async def get_recommendations(
+    provider_name: str,
+    top_n: int = Query(5, description="回傳前幾檔推薦"),
+    max_scan: int = Query(25, description="最多掃描幾檔（保護 API 額度）"),
+):
+    """
+    使用指定 Provider (alpha_vantage / polygon) 獨立掃描美股，
+    回傳每日推薦股票 Top-N
+    """
+    from src.services.recommendation_service import get_provider_recommendations
+    provider_name = provider_name.lower().replace("-", "_")
+    result = await get_provider_recommendations(
+        provider_name=provider_name,
+        top_n=top_n,
+        max_scan=max_scan,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+    return result
+
+@app.post("/api/daily-analysis/buy/us")
+async def trigger_daily_analysis_us(
+    background_tasks: BackgroundTasks,
+    top_n: int = Query(5, description="回傳前幾檔推薦"),
+    max_scan: int = Query(20, description="最多掃描幾檔"),
+):
+    """美股每日分析 (AlphaVantage / Polygon / Tiingo)，完成後發送 LINE 通知"""
+    from src.services.recommendation_service import get_provider_recommendations
+    from src.utils.notifier import send_combined_report
+
+    async def _run():
+        us_merged: dict = {}
+        for provider_name in ["polygon", "alpha_vantage", "tiingo"]:
+            result = await get_provider_recommendations(provider_name, top_n=top_n * 2, max_scan=max_scan)
+            if result.get("status") != "success":
+                logger.warning(f"[DailyUS] {provider_name} failed: {result.get('error', 'unknown')}")
+                continue
+            for rec in result.get("recommendations", []):
+                ticker = rec["ticker"]
+                if ticker not in us_merged:
+                    us_merged[ticker] = {**rec, "provider_count": 1, "providers": [provider_name]}
+                else:
+                    us_merged[ticker]["score"] = max(us_merged[ticker]["score"], rec["score"]) + 15
+                    us_merged[ticker]["provider_count"] += 1
+                    us_merged[ticker]["providers"].append(provider_name)
+                    existing = us_merged[ticker].get("reason", "")
+                    new = rec.get("reason", "")
+                    if new and new not in existing:
+                        us_merged[ticker]["reason"] = f"{existing} | {new}" if existing else new
+
+        top = sorted(us_merged.values(), key=lambda x: x["score"], reverse=True)[:top_n]
+
+        buy_list = []
+        for r in top:
+            providers_str = "/".join(r.get("providers", []))
+            reason = r.get("reason", "技術訊號")
+            if r.get("provider_count", 1) > 1:
+                reason = f"[{r['provider_count']}家確認:{providers_str}] {reason}"
+            buy_list.append({
+                "ticker": r["ticker"], "name": r.get("name", r["ticker"]),
+                "price": r["price"],
+                "buy_points": {"score": r["score"], "reason": reason},
+            })
+
+        send_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
+        logger.info(f"[DailyUS] 完成，推薦 {len(buy_list)} 檔，已發送 LINE")
+
+    background_tasks.add_task(_run)
+    return {"status": "us_analysis_started", "top_n": top_n, "max_scan": max_scan}
+
+
+@app.post("/api/daily-analysis/buy/tw")
+async def trigger_daily_analysis_tw(
+    background_tasks: BackgroundTasks,
+    top_n: int = Query(5, description="回傳前幾檔推薦"),
+    max_scan: int = Query(30, description="最多掃描幾檔"),
+):
+    """台股每日分析 (FinMind)，完成後發送 LINE 通知"""
+    from src.services.recommendation_service import get_tw_recommendations
+    from src.utils.notifier import send_combined_report
+
+    async def _run():
+        result = await get_tw_recommendations(top_n=top_n, max_scan=max_scan)
+        recs = result.get("recommendations", [])
+        buy_list = [{
+            "ticker": r["ticker"], "name": r.get("name", r["ticker"]),
+            "price": r["price"],
+            "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")},
+        } for r in recs]
+        send_combined_report("台股 (FinMind)", buy_list, [], [])
+        logger.info(f"[DailyTW] 完成，推薦 {len(buy_list)} 檔，已發送 LINE")
+
+    background_tasks.add_task(_run)
+    return {"status": "tw_analysis_started", "top_n": top_n, "max_scan": max_scan}
+
+
+@app.post("/api/daily-analysis/sell/us")
+async def trigger_sell_analysis_us(background_tasks: BackgroundTasks):
+    """掃描美股庫存+觀察名單的賣出訊號，結果發送 LINE 通知"""
+    from src.services.recommendation_service import get_sell_recommendations
+    background_tasks.add_task(get_sell_recommendations, "us")
+    return {"status": "us_sell_analysis_started"}
+
+
+@app.post("/api/daily-analysis/sell/tw")
+async def trigger_sell_analysis_tw(background_tasks: BackgroundTasks):
+    """掃描台股庫存+觀察名單的賣出訊號，結果發送 LINE 通知"""
+    from src.services.recommendation_service import get_sell_recommendations
+    background_tasks.add_task(get_sell_recommendations, "tw")
+    return {"status": "tw_sell_analysis_started"}
+
 
 @app.post("/api/robot/trade")
 async def robot_trade_selected(background_tasks: BackgroundTasks, payload: dict = Body(...)):

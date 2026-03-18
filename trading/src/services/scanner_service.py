@@ -93,24 +93,39 @@ async def run_scan(market, trading_service=None):
         logger.info(f"🎯 獵人模式鎖定 {len(ib_map)} 檔，Crawler 補足後共計 {len(combined_list)} 檔分析目標")
     else:
         # 其他市場維持舊邏輯
+        def _is_crypto_ticker(t):
+            return '/' in t or t.endswith('USDT') or t.endswith('BTC')
+        
         extra_tickers = all_monitor_tickers - set([s['ticker'] for s in full_stock_list])
+        # 過濾不屬於當前市場的 tickers (e.g. crypto tickers in US scan)
+        if market != "crypto":
+            extra_tickers = {t for t in extra_tickers if not _is_crypto_ticker(t)}
         combined_list = list(full_stock_list)
         for t in extra_tickers:
             combined_list.append({'ticker': t, 'name': t, 'pallar': '常規'})
 
     # 5. [核心分析] 四大維度綜合評分
-    sem = asyncio.Semaphore(10)
+    # 降低併發數以避免觸發免費用戶 API 的 429 Too Many Requests
+    # 當 IBKR 離線時降至序列化 (Semaphore=1) 以保護免費 API 額度
+    has_ibkr = (market == "us" and trading_service and 
+                hasattr(trading_service, 'ib_handler') and
+                hasattr(trading_service.ib_handler, 'us_broker') and
+                hasattr(trading_service.ib_handler.us_broker, 'ib') and
+                trading_service.ib_handler.us_broker.ib.isConnected())
+    sem = asyncio.Semaphore(3 if has_ibkr else 1)
     
     async def analyze_stock(stock):
         async with sem:
             try:
                 ticker = stock['ticker']
+                is_holding = ticker in holdings_map
                 # Ticker 修正 (BRKB -> BRK B)
                 clean_ticker = ticker.replace('.', ' ') if market == 'us' else ticker
                 
                 # --- A. 技術面與即時行情 (優先 IBKR -> Fallback DataService) ---
                 df = None
                 # 優化：先檢查連線，避免遍歷時瘋狂重連
+                skip_fallback = False
                 if market == "us" and trading_service:
                     try:
                         # 假設 us_broker 有暴露 ib 物件或 is_connected 方法
@@ -118,10 +133,12 @@ async def run_scan(market, trading_service=None):
                         if hasattr(trading_service.ib_handler.us_broker, 'ib') and \
                            trading_service.ib_handler.us_broker.ib.isConnected():
                             df = await trading_service.ib_handler.us_broker.get_historical_data(clean_ticker)
+                            # 如果 IBKR 已經連線，就不再使用 Fallback API
+                            skip_fallback = True
                     except: pass
                 
                 if df is None or df.empty:
-                    df = fetch_history(ticker)
+                    df = fetch_history(ticker, skip_fallback=skip_fallback)
                 
                 if df is None or len(df) < 15: return None
                 curr_price = df['Close'].iloc[-1]
@@ -181,8 +198,17 @@ async def run_scan(market, trading_service=None):
             except Exception: return None
 
     # 6. 執行分析
-    tasks = [analyze_stock(s) for s in combined_list]
-    all_results = await asyncio.gather(*tasks)
+    async def run_analysis():
+        results = []
+        for s in combined_list:
+            r = await analyze_stock(s)
+            results.append(r)
+            # 當不使用 IBKR 時，額外間隔避免 API 過載
+            if not has_ibkr:
+                await asyncio.sleep(1.5)
+        return results
+
+    all_results = await run_analysis()
     all_results = [r for r in all_results if r is not None]
     
     # 7. 彙整結果

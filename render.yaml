@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: trading-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.trading
+    plan: free          # 改成 starter 或以上可避免 sleep
+    healthCheckPath: /health
+
+    envVars:
+      - key: PORT
+        value: "8002"
+      - key: AUTO_TRADE_ENABLED
+        value: "false"       # 雲端不連 IBKR，停用自動交易
+      - key: DISABLE_SCHEDULER
+        value: "true"        # 由外部 cron 呼叫，不啟動內部排程器
+
+      # --- 美股 Data Providers ---
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false      # 在 Render Dashboard 設定實際值
+      - key: POLYGON_API_KEY
+        sync: false
+      - key: TIINGO_API_KEY
+        sync: false
+
+      # --- 台股 ---
+      - key: FINMIND_API_KEY
+        sync: false
+
+      # --- LINE ---
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: LINE_USER_ID
+        sync: false
+      - key: LINE_CHANNEL_SECRET
+        sync: false
