@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kill -9 80070 80087)",
+      "Bash(xargs kill:*)"
+    ]
+  }
+}

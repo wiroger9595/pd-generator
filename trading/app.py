@@ -591,4 +591,5 @@ async def robot_trade_selected(background_tasks: BackgroundTasks, payload: dict 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8002)
+    port = int(os.getenv("TRADING_API_PORT", 8002))
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
