@@ -1,6 +1,5 @@
 import talib
 import numpy as np
-import pandas_ta as ta
 from src.strategies.base import BaseStrategy
 from src.strategies.adv_indicators import AdvancedIndicators
 
@@ -102,8 +101,8 @@ class ComprehensiveStrategy(BaseStrategy):
             except Exception as e:
                 smc_text = ""
 
-            bb = ta.bbands(close, length=20, std=2)
-            upper_band = bb.iloc[-1, 2] if bb is not None else curr_p * 1.1
+            upper_band_arr, _, _ = talib.BBANDS(close.astype(float), timeperiod=20, nbdevup=2, nbdevdn=2)
+            upper_band = upper_band_arr.iloc[-1] if not np.isnan(upper_band_arr.iloc[-1]) else curr_p * 1.1
 
             return True, {
                 "entry_price": curr_p,

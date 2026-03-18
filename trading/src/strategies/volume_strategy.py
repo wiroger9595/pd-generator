@@ -49,16 +49,16 @@ class VolumeStrategy(BaseStrategy):
         if not passed: return False, {}
         
         try:
-            import pandas_ta as ta
-            bb = ta.bbands(df['Close'], length=20, std=2)
-            if bb is None or len(bb) == 0: return False, {}
-            
-            mid_band = bb.iloc[-1][1]
+            import talib, numpy as np
+            upper, middle, _ = talib.BBANDS(df['Close'].astype(float), timeperiod=20, nbdevup=2, nbdevdn=2)
+            if np.isnan(middle.iloc[-1]): return False, {}
+
+            mid_band = float(middle.iloc[-1])
             strength_score = round(tech_data['vol_ratio'] * 50 + (tech_data['price_change'] * 500), 2)
-            
+
             return True, {
                 "entry_price": round(max(tech_data['price'] * 0.985, mid_band), 2),
-                "take_profit": round(bb.iloc[-1][2], 2),
+                "take_profit": round(float(upper.iloc[-1]), 2),
                 "score": strength_score,
                 "reason": f"評分:{strength_score} | 量比:{tech_data['vol_ratio']:.2f}"
             }

@@ -172,14 +172,9 @@ def _score_stock(df, ticker: str) -> dict | None:
 
         # 計算建議進場價與目標價
         try:
-            import pandas_ta as ta
-            bb = ta.bbands(close, length=20, std=2)
-            if bb is not None and len(bb) > 0:
-                entry_price = round(curr_p * 0.985, 2)
-                take_profit = round(float(bb.iloc[-1, 2]), 2)  # upper band
-            else:
-                entry_price = round(curr_p * 0.985, 2)
-                take_profit = round(curr_p * 1.05, 2)
+            upper, _, _ = talib.BBANDS(close.astype(float), timeperiod=20, nbdevup=2, nbdevdn=2)
+            entry_price = round(curr_p * 0.985, 2)
+            take_profit = round(float(upper.iloc[-1]), 2) if not np.isnan(upper.iloc[-1]) else round(curr_p * 1.05, 2)
         except Exception:
             entry_price = round(curr_p * 0.985, 2)
             take_profit = round(curr_p * 1.05, 2)

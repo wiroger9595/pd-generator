@@ -1,5 +1,5 @@
 import pandas as pd
-import pandas_ta as ta
+import talib
 import numpy as np
 
 class AdvancedIndicators:
@@ -18,18 +18,16 @@ class AdvancedIndicators:
         if df.empty or len(df) < 30:
             return df
             
-        # 計算指數移動平均線 (EMA)
-        df['EMA_20'] = ta.ema(df['Close'], length=20)
-        df['EMA_50'] = ta.ema(df['Close'], length=50)
-        df['EMA_200'] = ta.ema(df['Close'], length=200)
-        
-        # 計算 MACD
-        # pandas_ta macd 回傳三個欄位: MACD, Histogram, Signal
-        macd_df = ta.macd(df['Close'], fast=12, slow=26, signal=9)
-        if macd_df is not None:
-            # 根據預設欄位名稱合併回 df
-            df = df.join(macd_df)
-            
+        close = df['Close'].astype(float)
+        df['EMA_20'] = talib.EMA(close, timeperiod=20)
+        df['EMA_50'] = talib.EMA(close, timeperiod=50)
+        df['EMA_200'] = talib.EMA(close, timeperiod=200)
+
+        macd, signal, hist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
+        df['MACD_12_26_9'] = macd
+        df['MACDs_12_26_9'] = signal
+        df['MACDh_12_26_9'] = hist
+
         return df
 
     @staticmethod
