@@ -19,7 +19,7 @@ watchdog
 diagrams
 tradingview-ta
 python-multipart
-tradingview_ta
 shioaji
+ccxt
 APScheduler>=3.10.0
 # ta-lib 需手動安裝系統依賴：brew install ta-lib (macOS) / Dockerfile.trading (雲端)
