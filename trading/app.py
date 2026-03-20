@@ -162,10 +162,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Trading System API", lifespan=lifespan)
 
-@app.get("/health")
-@app.head("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
-    return {"status": "ok"}
+    return Response(content="ok", media_type="text/plain")
 
 
 @app.post("/callback")
