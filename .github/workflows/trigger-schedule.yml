@@ -1,0 +1,74 @@
+name: Trigger Render Server scheduled tasks
+
+on:
+  schedule:
+    # /health api
+    - cron: '47 22 * * *'
+    - cron: '17 23 * * *'
+    - cron: '18 7 * * *'
+    - cron: '48 6 * * *'
+    # /api/daily-analysis/sell/us
+    - cron: '30 23 * * *'
+    # /api/daily-analysis/buy/tw
+    - cron: '0 7 * * *'
+    # /api/daily-analysis/buy/us
+    - cron: '0 23 * * *'
+    # /api/daily-analysis/sell/tw
+    - cron: '30 7 * * *'
+  workflow_dispatch: # 允許手動觸發測試
+
+jobs:
+  trigger-health:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '47 22 * * *' || github.event.schedule == '17 23 * * *' || github.event.schedule == '18 7 * * *' || github.event.schedule == '48 6 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /health API
+        run: |
+          curl -sSf "https://pd-generator-2uwi.onrender.com/health"
+          echo "Called /health API successfully"
+
+  trigger-sell-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 23 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/daily-analysis/sell/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/us"
+          echo "Called /api/daily-analysis/sell/us API successfully"
+
+  trigger-buy-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 7 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/daily-analysis/buy/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/buy/tw"
+          echo "Called /api/daily-analysis/buy/tw API successfully"
+
+  trigger-buy-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 23 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/daily-analysis/buy/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/buy/us"
+          echo "Called /api/daily-analysis/buy/us API successfully"
+
+  trigger-sell-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 7 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/daily-analysis/sell/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/tw"
+          echo "Called /api/daily-analysis/sell/tw API successfully"
+  
+  wake_up:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Request (Like Postman)
+        run: |
+          curl --connect-timeout 60 \
+               --max-time 120 \
+               --retry 3 \
+               -i https://pd-generator-2uwi.onrender.com
