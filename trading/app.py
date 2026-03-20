@@ -163,6 +163,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Trading System API", lifespan=lifespan)
 
 @app.get("/health")
+@app.head("/health")
 async def health():
     return {"status": "ok"}
 

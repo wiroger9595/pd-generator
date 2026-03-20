@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(kill -9 80070 80087)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(git add:*)",
+      "Bash(git status:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
