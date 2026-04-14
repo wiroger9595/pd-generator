@@ -1,8 +1,10 @@
 """
 多維度共振彙整 Controller  —  /api/summary/*
+買進：技術+基本+籌碼+消息 四維共振
+賣出：基本+籌碼+消息 三維共振（庫存+觀察名單）
 """
 from fastapi import APIRouter, BackgroundTasks, Query
-from src.utils.notifier import send_summary_report
+from src.utils.notifier import send_summary_report, send_summary_sell_report
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/api/summary", tags=["Summary"])
@@ -48,3 +50,43 @@ async def summary_buy_us(
 
     background_tasks.add_task(_run)
     return {"status": "us_summary_buy_started", "min_dimensions": min_dimensions}
+
+
+@router.post("/sell/tw")
+async def summary_sell_tw(
+    background_tasks: BackgroundTasks,
+    min_dimensions: int = Query(2, description="至少幾個面向同時警示（2-3）"),
+):
+    """台股三維共振賣出警示：基本面+籌碼面+消息面，掃描庫存+觀察名單，發送 LINE"""
+    from src.services.summary_service import get_tw_summary_sell
+
+    async def _run():
+        result = await get_tw_summary_sell(min_dimensions=min_dimensions)
+        send_summary_sell_report("台股", result.get("results", []))
+        logger.info(
+            f"[Summary] 台股賣出警示完成，掃描 {result.get('scanned_tickers', 0)} 檔，"
+            f"警示 {result.get('alert_count', 0)} 檔"
+        )
+
+    background_tasks.add_task(_run)
+    return {"status": "tw_summary_sell_started", "min_dimensions": min_dimensions}
+
+
+@router.post("/sell/us")
+async def summary_sell_us(
+    background_tasks: BackgroundTasks,
+    min_dimensions: int = Query(2, description="至少幾個面向同時警示（2-3）"),
+):
+    """美股三維共振賣出警示：基本面+籌碼面+消息面，掃描庫存+觀察名單，發送 LINE"""
+    from src.services.summary_service import get_us_summary_sell
+
+    async def _run():
+        result = await get_us_summary_sell(min_dimensions=min_dimensions)
+        send_summary_sell_report("美股", result.get("results", []))
+        logger.info(
+            f"[Summary] 美股賣出警示完成，掃描 {result.get('scanned_tickers', 0)} 檔，"
+            f"警示 {result.get('alert_count', 0)} 檔"
+        )
+
+    background_tasks.add_task(_run)
+    return {"status": "us_summary_sell_started", "min_dimensions": min_dimensions}

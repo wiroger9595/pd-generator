@@ -43,6 +43,10 @@ on:
     - cron: '0 11 * * 1-5'
     # /api/summary/buy/us  (美東 00:00，盤後四維彙整)
     - cron: '0 16 * * 1-5'
+    # /api/summary/sell/tw  (台灣 19:30，三維賣出警示)
+    - cron: '30 11 * * 1-5'
+    # /api/summary/sell/us  (美東 00:30，三維賣出警示)
+    - cron: '30 16 * * 1-5'
   workflow_dispatch: # 允許手動觸發測試
 
 jobs:
@@ -216,6 +220,24 @@ jobs:
         run: |
           curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/buy/us"
           echo "Called /api/summary/buy/us API successfully"
+
+  trigger-summary-sell-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 11 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/summary/sell/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/sell/tw"
+          echo "Called /api/summary/sell/tw API successfully"
+
+  trigger-summary-sell-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 16 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/summary/sell/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/sell/us"
+          echo "Called /api/summary/sell/us API successfully"
 
   wake_up:
     runs-on: ubuntu-latest

@@ -222,3 +222,71 @@ def send_summary_report(market_name: str, results: list):
                 print(f"❌ [LINE] 發送異常: {e}")
 
     print(f"✅ [LINE] 共振報告發送完成，共送出 {total_sent} 則訊息。")
+
+
+def send_summary_sell_report(market_name: str, results: list):
+    """
+    發送多維度賣出警示至 LINE
+    results 結構與 send_summary_report 相同，但以警示語氣呈現
+    """
+    bot_configs = get_line_bot_configs()
+    db_users = get_all_users()
+    if not bot_configs and not db_users:
+        print("⚠️ [LINE] 未設定任何 Token 或 User ID，跳過通知")
+        return
+
+    dim_order = ["籌碼面", "基本面", "消息面"]
+    warn_stars = {3: "🔴🔴🔴", 2: "🔴🔴", 1: "🔴"}
+
+    header = (
+        f"【⚠️ {market_name} 多維度賣出警示】\n"
+        f"日期: {time.strftime('%Y-%m-%d')}\n"
+        f"{'='*15}\n\n"
+    )
+
+    if not results:
+        body = "今日庫存+觀察名單無多維度賣出訊號。\n"
+    else:
+        body = ""
+        for i, s in enumerate(results, 1):
+            dims = s.get("dimensions", {})
+            dim_count = len(dims)
+            warn = warn_stars.get(dim_count, "🔴")
+            name = s.get("name", s.get("ticker", ""))
+            ticker = s.get("ticker", "")
+            total = s.get("total_score", 0)
+
+            body += f"{warn} {i}. {name} ({ticker})  警示:{dim_count}/3  總分:{total}\n"
+
+            for dim_label in dim_order:
+                if dim_label in dims:
+                    d = dims[dim_label]
+                    reason = d.get("reason", "")[:40]
+                    body += f"  [{dim_label}] 分:{d.get('score',0)} {reason}\n"
+            body += "\n"
+
+    footer = f"{'='*15}\n⚠️ 請評估是否減碼或出場，投資有風險。"
+    full_msg = header + body + footer
+
+    total_sent = 0
+    for config in bot_configs:
+        token = config["token"]
+        target_users = list(set(config["users"] + db_users))
+        target_users = [u for u in target_users if u.startswith("U")]
+        for uid in target_users:
+            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
+            try:
+                r = requests.post(
+                    "https://api.line.me/v2/bot/message/push",
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    json=payload,
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    total_sent += 1
+                else:
+                    print(f"⚠️ [LINE] 共振賣出報告發送失敗: {r.text}")
+            except Exception as e:
+                print(f"❌ [LINE] 發送異常: {e}")
+
+    print(f"✅ [LINE] 共振賣出報告發送完成，共送出 {total_sent} 則訊息。")

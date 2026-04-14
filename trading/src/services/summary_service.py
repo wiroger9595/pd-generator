@@ -1,7 +1,8 @@
 """
 多維度共振彙整服務
-同時執行 技術面、基本面、籌碼面、消息面 的買進掃描，
-找出在多個面向都觸發訊號的股票，輸出共振排行。
+買進：技術面、基本面、籌碼面、消息面 同時掃描，找出多維共振股票
+賣出：基本面、籌碼面、消息面 掃描庫存+觀察名單，找出多維警示股票
+      (技術面賣出訊號由各自的 daily-analysis/sell 獨立發出)
 """
 import asyncio
 from src.utils.logger import logger
@@ -44,14 +45,16 @@ def _merge_dimension(merged: dict, items: list, dim_key: str):
         merged[norm]["total_score"] += score
 
 
-async def _safe_call(coro, label: str) -> list:
-    """安全呼叫各面向，發生錯誤時回傳空清單"""
+async def _safe_call(coro, label: str, key: str = "recommendations") -> list:
+    """安全呼叫各面向，發生錯誤時回傳空清單。
+    key: 買進用 'recommendations'，賣出用 'sell_signals'
+    """
     try:
         result = await coro
         if result.get("status") != "success":
             logger.warning(f"[Summary] {label} returned non-success: {result.get('error', '')}")
             return []
-        return result.get("recommendations", [])
+        return result.get(key, [])
     except Exception as e:
         logger.warning(f"[Summary] {label} failed: {e}")
         return []
@@ -174,4 +177,89 @@ async def get_us_summary_buy(top_n: int = 5, min_dimensions: int = 2) -> dict:
         "resonant_count": len(resonant),
         "min_dimensions": min_dimensions,
         "results": top,
+    }
+
+
+# ─────────────────────────────────────────────
+# 台股四維警示（賣出）
+# ─────────────────────────────────────────────
+
+async def get_tw_summary_sell(min_dimensions: int = 2) -> dict:
+    """
+    台股多維度共振賣出警示
+    掃描庫存+觀察名單，基本面/籌碼面/消息面同時觸發賣出訊號的股票優先警示
+    技術面賣出由 /api/daily-analysis/sell/tw 獨立處理
+    """
+    from src.services.fundamental_service import get_tw_fundamental_sell
+    from src.services.chip_service import get_tw_chip_sell
+    from src.services.news_service import get_tw_news_sell
+
+    logger.info("[Summary] 開始台股賣出三維掃描...")
+
+    fund_items, chip_items, news_items = await asyncio.gather(
+        _safe_call(get_tw_fundamental_sell(), "基本面", key="sell_signals"),
+        _safe_call(get_tw_chip_sell(), "籌碼面", key="sell_signals"),
+        _safe_call(get_tw_news_sell(), "消息面", key="sell_signals"),
+    )
+
+    merged: dict = {}
+    _merge_dimension(merged, fund_items, "fundamental")
+    _merge_dimension(merged, chip_items, "chip")
+    _merge_dimension(merged, news_items, "news")
+
+    # 賣出：至少 min_dimensions 個面向都警示才納入
+    alerts = [v for v in merged.values() if len(v["dimensions"]) >= min_dimensions]
+    # 分數越負越危險，排在前面
+    alerts.sort(key=lambda x: (len(x["dimensions"]), x["total_score"]))
+
+    logger.info(f"[Summary] 台股賣出掃描完成，警示 {len(alerts)} 檔")
+    return {
+        "status": "success",
+        "market": "TW",
+        "type": "summary_sell",
+        "scanned_tickers": len(merged),
+        "alert_count": len(alerts),
+        "min_dimensions": min_dimensions,
+        "results": alerts,
+    }
+
+
+# ─────────────────────────────────────────────
+# 美股四維警示（賣出）
+# ─────────────────────────────────────────────
+
+async def get_us_summary_sell(min_dimensions: int = 2) -> dict:
+    """
+    美股多維度共振賣出警示
+    掃描庫存+觀察名單，基本面/籌碼面/消息面同時觸發賣出訊號的股票優先警示
+    """
+    from src.services.fundamental_service import get_us_fundamental_sell
+    from src.services.chip_service import get_us_chip_sell
+    from src.services.news_service import get_us_news_sell
+
+    logger.info("[Summary] 開始美股賣出三維掃描...")
+
+    fund_items, chip_items, news_items = await asyncio.gather(
+        _safe_call(get_us_fundamental_sell(), "基本面", key="sell_signals"),
+        _safe_call(get_us_chip_sell(), "籌碼面", key="sell_signals"),
+        _safe_call(get_us_news_sell(), "消息面", key="sell_signals"),
+    )
+
+    merged: dict = {}
+    _merge_dimension(merged, fund_items, "fundamental")
+    _merge_dimension(merged, chip_items, "chip")
+    _merge_dimension(merged, news_items, "news")
+
+    alerts = [v for v in merged.values() if len(v["dimensions"]) >= min_dimensions]
+    alerts.sort(key=lambda x: (len(x["dimensions"]), x["total_score"]))
+
+    logger.info(f"[Summary] 美股賣出掃描完成，警示 {len(alerts)} 檔")
+    return {
+        "status": "success",
+        "market": "US",
+        "type": "summary_sell",
+        "scanned_tickers": len(merged),
+        "alert_count": len(alerts),
+        "min_dimensions": min_dimensions,
+        "results": alerts,
     }
