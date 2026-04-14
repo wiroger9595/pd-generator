@@ -99,3 +99,126 @@ def send_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[]
 
 def send_line_report(market_name, stocks):
     send_combined_report(market_name, buy_stocks=stocks, sell_holdings=[], sell_watched=[])
+
+def send_fundamental_report(market_name: str, signal_type: str, items: list):
+    """
+    發送基本面/籌碼/情緒分析報告至 LINE
+    signal_type: 'buy' 或 'sell'
+    items: [{"ticker", "name", "score", "reason"}, ...]
+    """
+    bot_configs = get_line_bot_configs()
+    db_users = get_all_users()
+    if not bot_configs and not db_users:
+        print("⚠️ [LINE] 未設定任何 Token 或 User ID，跳過通知")
+        return
+
+    emoji = "📈" if signal_type == "buy" else "📉"
+    label = "買進" if signal_type == "buy" else "賣出"
+    header = (
+        f"【{emoji} {market_name} 基本面{label}訊號】\n"
+        f"日期: {time.strftime('%Y-%m-%d')}\n"
+        f"{'='*15}\n\n"
+    )
+
+    if not items:
+        body = f"今日無基本面{label}訊號。\n"
+    else:
+        body = ""
+        for s in items:
+            body += f"• {s.get('name', '')} ({s.get('ticker', '')})\n"
+            body += f"  評分: {s.get('score', 0)} | {s.get('reason', '')}\n"
+
+    footer = f"\n{'='*15}\n投資有風險，請獨立判斷。"
+    full_msg = header + body + footer
+
+    total_sent = 0
+    for config in bot_configs:
+        token = config["token"]
+        target_users = list(set(config["users"] + db_users))
+        target_users = [u for u in target_users if u.startswith("U")]
+        for uid in target_users:
+            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
+            try:
+                r = requests.post(
+                    "https://api.line.me/v2/bot/message/push",
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    json=payload,
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    total_sent += 1
+                else:
+                    print(f"⚠️ [LINE] 基本面報告發送失敗: {r.text}")
+            except Exception as e:
+                print(f"❌ [LINE] 發送異常: {e}")
+
+    print(f"✅ [LINE] 基本面報告發送完成，共送出 {total_sent} 則訊息。")
+
+
+def send_summary_report(market_name: str, results: list):
+    """
+    發送多維度共振彙整報告至 LINE
+    results: summary_service 回傳的 results 清單
+      每筆: {"ticker", "name", "total_score", "dimensions": {面向名: {"score", "reason"}}}
+    """
+    bot_configs = get_line_bot_configs()
+    db_users = get_all_users()
+    if not bot_configs and not db_users:
+        print("⚠️ [LINE] 未設定任何 Token 或 User ID，跳過通知")
+        return
+
+    dim_order = ["技術面", "籌碼面", "基本面", "消息面"]
+    stars = {4: "★★★★", 3: "★★★", 2: "★★", 1: "★"}
+
+    header = (
+        f"【🔥 {market_name} 多維度共振買進】\n"
+        f"日期: {time.strftime('%Y-%m-%d')}\n"
+        f"{'='*15}\n\n"
+    )
+
+    if not results:
+        body = "今日無多維度共振訊號。\n"
+    else:
+        body = ""
+        for i, s in enumerate(results, 1):
+            dims = s.get("dimensions", {})
+            dim_count = len(dims)
+            star = stars.get(dim_count, "★")
+            name = s.get("name", s.get("ticker", ""))
+            ticker = s.get("ticker", "")
+            total = s.get("total_score", 0)
+
+            body += f"{star} {i}. {name} ({ticker})  共振:{dim_count}/4  總分:{total}\n"
+
+            for dim_label in dim_order:
+                if dim_label in dims:
+                    d = dims[dim_label]
+                    reason = d.get("reason", "")[:40]  # 截斷避免訊息過長
+                    body += f"  [{dim_label}] 分:{d.get('score',0)} {reason}\n"
+            body += "\n"
+
+    footer = f"{'='*15}\n投資有風險，請獨立判斷。"
+    full_msg = header + body + footer
+
+    total_sent = 0
+    for config in bot_configs:
+        token = config["token"]
+        target_users = list(set(config["users"] + db_users))
+        target_users = [u for u in target_users if u.startswith("U")]
+        for uid in target_users:
+            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
+            try:
+                r = requests.post(
+                    "https://api.line.me/v2/bot/message/push",
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    json=payload,
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    total_sent += 1
+                else:
+                    print(f"⚠️ [LINE] 共振報告發送失敗: {r.text}")
+            except Exception as e:
+                print(f"❌ [LINE] 發送異常: {e}")
+
+    print(f"✅ [LINE] 共振報告發送完成，共送出 {total_sent} 則訊息。")

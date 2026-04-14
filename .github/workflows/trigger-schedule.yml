@@ -15,6 +15,34 @@ on:
     - cron: '0 23 * * 1-5'
     # /api/daily-analysis/sell/tw
     - cron: '30 7 * * 1-5'
+    # /api/fundamental/sell/tw  (台灣 16:00)
+    - cron: '0 8 * * 1-5'
+    # /api/fundamental/buy/tw   (台灣 16:30)
+    - cron: '30 8 * * 1-5'
+    # /api/fundamental/sell/us  (台灣 07:45)
+    - cron: '45 23 * * 1-5'
+    # /api/fundamental/buy/us   (台灣 21:00)
+    - cron: '0 13 * * 1-5'
+    # /api/chip/sell/tw  (台灣 17:15)
+    - cron: '15 9 * * 1-5'
+    # /api/chip/buy/tw   (台灣 17:45)
+    - cron: '45 9 * * 1-5'
+    # /api/chip/sell/us  (美東 22:15, 盤後)
+    - cron: '15 22 * * 1-5'
+    # /api/chip/buy/us   (台灣 22:15)
+    - cron: '15 14 * * 1-5'
+    # /api/news/sell/tw  (台灣 18:15)
+    - cron: '15 10 * * 1-5'
+    # /api/news/buy/tw   (台灣 18:45)
+    - cron: '45 10 * * 1-5'
+    # /api/news/sell/us  (美東 22:30, 盤後)
+    - cron: '30 22 * * 1-5'
+    # /api/news/buy/us   (台灣 22:30)
+    - cron: '30 14 * * 1-5'
+    # /api/summary/buy/tw  (台灣 19:00，四維掃描全部完成後)
+    - cron: '0 11 * * 1-5'
+    # /api/summary/buy/us  (美東 00:00，盤後四維彙整)
+    - cron: '0 16 * * 1-5'
   workflow_dispatch: # 允許手動觸發測試
 
 jobs:
@@ -63,6 +91,132 @@ jobs:
           curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/tw"
           echo "Called /api/daily-analysis/sell/tw API successfully"
   
+  trigger-fundamental-sell-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 8 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/fundamental/sell/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/sell/tw"
+          echo "Called /api/fundamental/sell/tw API successfully"
+
+  trigger-fundamental-buy-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 8 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/fundamental/buy/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/buy/tw"
+          echo "Called /api/fundamental/buy/tw API successfully"
+
+  trigger-fundamental-sell-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '45 23 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/fundamental/sell/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/sell/us"
+          echo "Called /api/fundamental/sell/us API successfully"
+
+  trigger-fundamental-buy-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 13 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/fundamental/buy/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/buy/us"
+          echo "Called /api/fundamental/buy/us API successfully"
+
+  trigger-chip-sell-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '15 9 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/chip/sell/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/sell/tw"
+          echo "Called /api/chip/sell/tw API successfully"
+
+  trigger-chip-buy-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '45 9 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/chip/buy/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/buy/tw"
+          echo "Called /api/chip/buy/tw API successfully"
+
+  trigger-chip-sell-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '15 22 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/chip/sell/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/sell/us"
+          echo "Called /api/chip/sell/us API successfully"
+
+  trigger-chip-buy-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '15 14 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/chip/buy/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/buy/us"
+          echo "Called /api/chip/buy/us API successfully"
+
+  trigger-news-sell-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '15 10 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/news/sell/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/sell/tw"
+          echo "Called /api/news/sell/tw API successfully"
+
+  trigger-news-buy-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '45 10 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/news/buy/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/buy/tw"
+          echo "Called /api/news/buy/tw API successfully"
+
+  trigger-news-sell-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 22 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/news/sell/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/sell/us"
+          echo "Called /api/news/sell/us API successfully"
+
+  trigger-news-buy-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 14 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/news/buy/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/buy/us"
+          echo "Called /api/news/buy/us API successfully"
+
+  trigger-summary-buy-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 11 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/summary/buy/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/buy/tw"
+          echo "Called /api/summary/buy/tw API successfully"
+
+  trigger-summary-buy-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 16 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/summary/buy/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/buy/us"
+          echo "Called /api/summary/buy/us API successfully"
+
   wake_up:
     runs-on: ubuntu-latest
     steps:
