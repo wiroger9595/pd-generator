@@ -1,8 +1,12 @@
 import requests
+import urllib3
 import pandas as pd
-from io import StringIO  # <--- 新增這個來解決 FutureWarning
+from io import StringIO
 
 from src.utils.logger import logger
+
+# isin.twse.com.tw 憑證缺少 Subject Key Identifier，停用該 host 的 SSL 警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_tw_stock_list():
     """
@@ -10,7 +14,7 @@ def get_tw_stock_list():
     """
     logger.info("📥 正在抓取台股清單...")
     stocks = []
-    
+
     # 定義要抓取的網址與對應後綴
     # mode=2: 上市, mode=4: 上櫃
     targets = [
@@ -21,7 +25,7 @@ def get_tw_stock_list():
     for target in targets:
         try:
             logger.info(f"   - 正在抓取{target['type']}股票...")
-            res = requests.get(target['url'])
+            res = requests.get(target['url'], verify=False, timeout=15)
             
             # 修正 FutureWarning: 使用 StringIO 包裝 HTML 字串
             df = pd.read_html(StringIO(res.text))[0]

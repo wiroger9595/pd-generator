@@ -267,14 +267,17 @@ class FinMindProvider(StockDataProvider):
         # FinMind for TW stocks
         try:
             import requests
-            
+
+            # FinMind 只接受純股票代碼，去除 .TW / .TWO 後綴
+            data_id = ticker.replace(".TWO", "").replace(".TW", "")
+
             start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
             url = "https://api.finmindtrade.com/api/v4/data"
             token = self.api_key
-            
+
             params = {
                 "dataset": "TaiwanStockPrice",
-                "data_id": ticker,
+                "data_id": data_id,
                 "start_date": start_date,
             }
             if token: params["token"] = token
