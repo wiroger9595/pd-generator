@@ -27,6 +27,10 @@ from src.controllers import (
     news_router,
     summary_router,
     trade_router,
+    eod_router,
+    technical_router,
+    ai_news_router,
+    monitor_router,
 )
 
 
@@ -125,6 +129,10 @@ app.include_router(chip_router)
 app.include_router(news_router)
 app.include_router(summary_router)
 app.include_router(trade_router)
+app.include_router(eod_router)
+app.include_router(technical_router)
+app.include_router(ai_news_router)
+app.include_router(monitor_router)
 
 
 if __name__ == "__main__":

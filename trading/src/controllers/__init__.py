@@ -6,6 +6,10 @@ from .chip_controller import router as chip_router
 from .news_controller import router as news_router
 from .summary_controller import router as summary_router
 from .trade_controller import router as trade_router
+from .eod_controller import router as eod_router
+from .technical_controller import router as technical_router
+from .ai_news_controller import router as ai_news_router
+from .monitor_controller import router as monitor_router
 
 __all__ = [
     "health_router",
@@ -16,4 +20,8 @@ __all__ = [
     "news_router",
     "summary_router",
     "trade_router",
+    "eod_router",
+    "technical_router",
+    "ai_news_router",
+    "monitor_router",
 ]

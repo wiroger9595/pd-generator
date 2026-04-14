@@ -47,6 +47,8 @@ on:
     - cron: '30 11 * * 1-5'
     # /api/summary/sell/us  (美東 00:30，三維賣出警示)
     - cron: '30 16 * * 1-5'
+    # /api/eod/sync/tw  (台灣 20:00，盤後 EOD 批次同步)
+    - cron: '0 12 * * 1-5'
   workflow_dispatch: # 允許手動觸發測試
 
 jobs:
@@ -238,6 +240,15 @@ jobs:
         run: |
           curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/sell/us"
           echo "Called /api/summary/sell/us API successfully"
+
+  trigger-eod-sync-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 12 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/eod/sync/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/eod/sync/tw"
+          echo "Called /api/eod/sync/tw API successfully"
 
   wake_up:
     runs-on: ubuntu-latest

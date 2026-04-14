@@ -195,3 +195,119 @@ def get_all_users():
     except Exception as e:
         logger.error(f"get_all_users error: {e}")
         return []
+
+
+# ── EOD 快取 (籌碼面 + 基本面) ──────────────────────────────────────────
+
+def _eod_db_path() -> str:
+    path = os.path.join(os.getcwd(), "data", "eod.db")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
+
+def init_eod_db():
+    """初始化 EOD 快取資料庫，建立 tw_eod_chip / tw_eod_fundamental 表"""
+    db_path = _eod_db_path()
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS tw_eod_chip (
+            date TEXT,
+            ticker TEXT,
+            name TEXT DEFAULT '',
+            foreign_net REAL DEFAULT 0,
+            trust_net REAL DEFAULT 0,
+            dealer_net REAL DEFAULT 0,
+            margin_diff REAL DEFAULT 0,
+            short_diff REAL DEFAULT 0,
+            foreign_shareholding_pct REAL DEFAULT 0,
+            PRIMARY KEY (date, ticker)
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS tw_eod_fundamental (
+            date TEXT,
+            ticker TEXT,
+            name TEXT DEFAULT '',
+            revenue REAL DEFAULT 0,
+            revenue_yoy REAL DEFAULT 0,
+            revenue_mom REAL DEFAULT 0,
+            PRIMARY KEY (date, ticker)
+        )
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def save_eod_chip_batch(records: list, date_str: str):
+    """批次寫入 EOD 籌碼面快取（先刪同日舊資料再插入）"""
+    db_path = init_eod_db()
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("DELETE FROM tw_eod_chip WHERE date = ?", (date_str,))
+    c.executemany(
+        """INSERT OR REPLACE INTO tw_eod_chip
+           (date, ticker, name, foreign_net, trust_net, dealer_net,
+            margin_diff, short_diff, foreign_shareholding_pct)
+           VALUES (:date, :ticker, :name, :foreign_net, :trust_net, :dealer_net,
+                   :margin_diff, :short_diff, :foreign_shareholding_pct)""",
+        records,
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_eod_fundamental_batch(records: list, date_str: str):
+    """批次寫入 EOD 基本面快取"""
+    db_path = init_eod_db()
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("DELETE FROM tw_eod_fundamental WHERE date = ?", (date_str,))
+    c.executemany(
+        """INSERT OR REPLACE INTO tw_eod_fundamental
+           (date, ticker, name, revenue, revenue_yoy, revenue_mom)
+           VALUES (:date, :ticker, :name, :revenue, :revenue_yoy, :revenue_mom)""",
+        records,
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_eod_chip(ticker: str, date_str: str = None) -> dict:
+    """讀取指定股票最新 EOD 籌碼面快取"""
+    db_path = _eod_db_path()
+    if not os.path.exists(db_path):
+        return {}
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    if date_str:
+        c.execute("SELECT * FROM tw_eod_chip WHERE ticker=? AND date=?", (ticker, date_str))
+    else:
+        c.execute("SELECT * FROM tw_eod_chip WHERE ticker=? ORDER BY date DESC LIMIT 1", (ticker,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return {}
+    cols = ["date", "ticker", "name", "foreign_net", "trust_net", "dealer_net",
+            "margin_diff", "short_diff", "foreign_shareholding_pct"]
+    return dict(zip(cols, row))
+
+
+def get_eod_fundamental(ticker: str, date_str: str = None) -> dict:
+    """讀取指定股票最新 EOD 基本面快取"""
+    db_path = _eod_db_path()
+    if not os.path.exists(db_path):
+        return {}
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    if date_str:
+        c.execute("SELECT * FROM tw_eod_fundamental WHERE ticker=? AND date=?", (ticker, date_str))
+    else:
+        c.execute("SELECT * FROM tw_eod_fundamental WHERE ticker=? ORDER BY date DESC LIMIT 1", (ticker,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return {}
+    cols = ["date", "ticker", "name", "revenue", "revenue_yoy", "revenue_mom"]
+    return dict(zip(cols, row))

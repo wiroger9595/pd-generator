@@ -23,3 +23,7 @@ shioaji
 ccxt
 APScheduler>=3.10.0
 # ta-lib 需手動安裝系統依賴：brew install ta-lib (macOS) / Dockerfile.trading (雲端)
+# EOD + AI News + Monitor
+feedparser          # Google News RSS 解析
+google-generativeai # Gemini AI 情緒分析
+fugle-marketdata    # Fugle 即時行情 WebSocket
