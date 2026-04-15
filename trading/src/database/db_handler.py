@@ -294,6 +294,52 @@ def get_eod_chip(ticker: str, date_str: str = None) -> dict:
     return dict(zip(cols, row))
 
 
+def get_all_eod_chip(date_str: str = None) -> list:
+    """讀取全部台股的最新 EOD 籌碼面快取"""
+    db_path = _eod_db_path()
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    if date_str:
+        c.execute("SELECT * FROM tw_eod_chip WHERE date=?", (date_str,))
+    else:
+        # 取每檔最新一筆
+        c.execute("""
+            SELECT * FROM tw_eod_chip
+            WHERE (ticker, date) IN (
+                SELECT ticker, MAX(date) FROM tw_eod_chip GROUP BY ticker
+            )
+        """)
+    rows = c.fetchall()
+    conn.close()
+    cols = ["date", "ticker", "name", "foreign_net", "trust_net", "dealer_net",
+            "margin_diff", "short_diff", "foreign_shareholding_pct"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def get_all_eod_fundamental(date_str: str = None) -> list:
+    """讀取全部台股的最新 EOD 基本面快取"""
+    db_path = _eod_db_path()
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    if date_str:
+        c.execute("SELECT * FROM tw_eod_fundamental WHERE date=?", (date_str,))
+    else:
+        c.execute("""
+            SELECT * FROM tw_eod_fundamental
+            WHERE (ticker, date) IN (
+                SELECT ticker, MAX(date) FROM tw_eod_fundamental GROUP BY ticker
+            )
+        """)
+    rows = c.fetchall()
+    conn.close()
+    cols = ["date", "ticker", "name", "revenue", "revenue_yoy", "revenue_mom"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
 def get_eod_fundamental(ticker: str, date_str: str = None) -> dict:
     """讀取指定股票最新 EOD 基本面快取"""
     db_path = _eod_db_path()

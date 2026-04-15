@@ -49,6 +49,10 @@ on:
     - cron: '30 16 * * 1-5'
     # /api/eod/sync/tw  (台灣 20:00，盤後 EOD 批次同步)
     - cron: '0 12 * * 1-5'
+    # /api/screener/tw  (台灣 20:30，EOD 同步完成後選股)
+    - cron: '30 12 * * 1-5'
+    # /api/screener/us  (美東 22:00，盤後美股選股)
+    - cron: '0 14 * * 2-6'
   workflow_dispatch: # 允許手動觸發測試
 
 jobs:
@@ -249,6 +253,24 @@ jobs:
         run: |
           curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/eod/sync/tw"
           echo "Called /api/eod/sync/tw API successfully"
+
+  trigger-screener-tw:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 12 * * 1-5' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/screener/tw API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/screener/tw"
+          echo "Called /api/screener/tw API successfully"
+
+  trigger-screener-us:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 14 * * 2-6' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Call /api/screener/us API
+        run: |
+          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/screener/us"
+          echo "Called /api/screener/us API successfully"
 
   wake_up:
     runs-on: ubuntu-latest

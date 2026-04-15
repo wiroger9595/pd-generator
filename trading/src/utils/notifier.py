@@ -290,3 +290,85 @@ def send_summary_sell_report(market_name: str, results: list):
                 print(f"❌ [LINE] 發送異常: {e}")
 
     print(f"✅ [LINE] 共振賣出報告發送完成，共送出 {total_sent} 則訊息。")
+
+
+def send_screener_report(market_name: str, results: list):
+    """
+    發送選股報告至 LINE
+    results 為 screener_service 回傳的 results 清單
+    每筆：{"ticker","name","overall_score","signal","dimensions":{面向:{"score","reason"}}}
+    """
+    bot_configs = get_line_bot_configs()
+    db_users = get_all_users()
+    if not bot_configs and not db_users:
+        print("⚠️ [LINE] 未設定任何 Token 或 User ID，跳過通知")
+        return
+
+    signal_emoji = {
+        "strong_buy": "🚀🚀", "buy": "🚀",
+        "neutral": "➖", "sell": "📉", "strong_sell": "📉📉",
+    }
+    dim_order_tw = ["chip", "fundamental", "technical", "news"]
+    dim_order_us = ["technical", "news"]
+    dim_label = {
+        "chip": "籌碼", "fundamental": "基本", "technical": "技術", "news": "消息",
+    }
+
+    header = (
+        f"【🔍 {market_name} 選股報告】\n"
+        f"日期: {time.strftime('%Y-%m-%d')}\n"
+        f"{'='*15}\n\n"
+    )
+
+    if not results:
+        body = "今日無符合條件的標的。\n"
+    else:
+        body = ""
+        is_tw = any("chip" in r.get("dimensions", {}) for r in results)
+        dim_order = dim_order_tw if is_tw else dim_order_us
+
+        for i, s in enumerate(results, 1):
+            sig = s.get("signal", "neutral")
+            emoji = signal_emoji.get(sig, "➖")
+            name = s.get("name", s.get("ticker", ""))
+            ticker = s.get("ticker", "")
+            total = s.get("overall_score", 0)
+            dims = s.get("dimensions", {})
+            providers = s.get("providers", [])
+
+            body += f"{emoji} {i}. {name} ({ticker})  總分:{total}  訊號:{sig}\n"
+            if providers:
+                body += f"  多方確認: {'+'.join(providers)}\n"
+
+            for dk in dim_order:
+                if dk in dims:
+                    d = dims[dk]
+                    reason = str(d.get("reason", ""))[:35]
+                    body += f"  [{dim_label.get(dk, dk)}] {d.get('score',0):+d} {reason}\n"
+            body += "\n"
+
+    footer = f"{'='*15}\n投資有風險，請獨立判斷。"
+    full_msg = header + body + footer
+
+    total_sent = 0
+    for config in bot_configs:
+        token = config["token"]
+        target_users = list(set(config["users"] + db_users))
+        target_users = [u for u in target_users if u.startswith("U")]
+        for uid in target_users:
+            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
+            try:
+                r = requests.post(
+                    "https://api.line.me/v2/bot/message/push",
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    json=payload,
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    total_sent += 1
+                else:
+                    print(f"⚠️ [LINE] 選股報告發送失敗: {r.text}")
+            except Exception as e:
+                print(f"❌ [LINE] 發送異常: {e}")
+
+    print(f"✅ [LINE] 選股報告發送完成，共送出 {total_sent} 則訊息。")
