@@ -5,7 +5,7 @@
 import os
 import time
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.utils.notifier import send_combined_report
 from src.utils.logger import logger
@@ -16,101 +16,93 @@ router = APIRouter(prefix="/api", tags=["Analysis"])
 # ── 掃描 ──────────────────────────────────────────────────────────────
 
 @router.post("/scan/full/{market}")
-async def trigger_full_scan(market: str, background_tasks: BackgroundTasks, request: Request):
+async def trigger_full_scan(market: str, request: Request):
     from src.services.scanner_service import run_scan
     market = market.lower()
     if market not in ["tw", "us", "crypto"]:
         raise HTTPException(status_code=400, detail="Invalid market")
-    background_tasks.add_task(run_scan, market, request.app.state.trading_service)
-    return {"status": "scan_started", "auto_trade": os.getenv("AUTO_TRADE_ENABLED", "false")}
+    result = await run_scan(market, request.app.state.trading_service)
+    return {"status": "success", "market": market.upper(), "result": result}
 
 
 # ── 每日技術面分析 ────────────────────────────────────────────────────
 
 @router.post("/daily-analysis/buy/us")
 async def daily_analysis_buy_us(
-    background_tasks: BackgroundTasks,
     top_n: int = Query(5),
     max_scan: int = Query(20),
 ):
     """美股每日技術分析（AV / Polygon / Tiingo 三源合併），結果發送 LINE"""
     from src.services.recommendation_service import get_provider_recommendations
 
-    async def _run():
-        merged: dict = {}
-        for provider in ["polygon", "alpha_vantage", "tiingo"]:
-            result = await get_provider_recommendations(provider, top_n=top_n * 2, max_scan=max_scan)
-            if result.get("status") != "success":
-                logger.warning(f"[DailyUS] {provider} failed: {result.get('error')}")
-                continue
-            for rec in result.get("recommendations", []):
-                t = rec["ticker"]
-                if t not in merged:
-                    merged[t] = {**rec, "provider_count": 1, "providers": [provider]}
-                else:
-                    merged[t]["score"] = max(merged[t]["score"], rec["score"]) + 15
-                    merged[t]["provider_count"] += 1
-                    merged[t]["providers"].append(provider)
-                    old, new = merged[t].get("reason", ""), rec.get("reason", "")
-                    if new and new not in old:
-                        merged[t]["reason"] = f"{old} | {new}" if old else new
+    merged: dict = {}
+    for provider in ["polygon", "alpha_vantage", "tiingo"]:
+        result = await get_provider_recommendations(provider, top_n=top_n * 2, max_scan=max_scan)
+        if result.get("status") != "success":
+            logger.warning(f"[DailyUS] {provider} failed: {result.get('error')}")
+            continue
+        for rec in result.get("recommendations", []):
+            t = rec["ticker"]
+            if t not in merged:
+                merged[t] = {**rec, "provider_count": 1, "providers": [provider]}
+            else:
+                merged[t]["score"] = max(merged[t]["score"], rec["score"]) + 15
+                merged[t]["provider_count"] += 1
+                merged[t]["providers"].append(provider)
+                old, new = merged[t].get("reason", ""), rec.get("reason", "")
+                if new and new not in old:
+                    merged[t]["reason"] = f"{old} | {new}" if old else new
 
-        top = sorted(merged.values(), key=lambda x: x["score"], reverse=True)[:top_n]
-        buy_list = []
-        for r in top:
-            ps = "/".join(r.get("providers", []))
-            reason = r.get("reason", "技術訊號")
-            if r.get("provider_count", 1) > 1:
-                reason = f"[{r['provider_count']}家確認:{ps}] {reason}"
-            buy_list.append({
-                "ticker": r["ticker"], "name": r.get("name", r["ticker"]),
-                "price": r["price"],
-                "buy_points": {"score": r["score"], "reason": reason},
-            })
+    top = sorted(merged.values(), key=lambda x: x["score"], reverse=True)[:top_n]
+    buy_list = []
+    for r in top:
+        ps = "/".join(r.get("providers", []))
+        reason = r.get("reason", "技術訊號")
+        if r.get("provider_count", 1) > 1:
+            reason = f"[{r['provider_count']}家確認:{ps}] {reason}"
+        buy_list.append({
+            "ticker": r["ticker"], "name": r.get("name", r["ticker"]),
+            "price": r["price"],
+            "buy_points": {"score": r["score"], "reason": reason},
+        })
 
-        send_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
-        logger.info(f"[DailyUS] 完成，推薦 {len(buy_list)} 檔")
-
-    background_tasks.add_task(_run)
-    return {"status": "us_analysis_started", "top_n": top_n, "max_scan": max_scan}
+    send_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
+    logger.info(f"[DailyUS] 完成，推薦 {len(buy_list)} 檔")
+    return {"status": "success", "recommendations": buy_list}
 
 
 @router.post("/daily-analysis/buy/tw")
 async def daily_analysis_buy_tw(
-    background_tasks: BackgroundTasks,
     top_n: int = Query(5),
     max_scan: int = Query(30),
 ):
     """台股每日技術分析（FinMind），結果發送 LINE"""
     from src.services.recommendation_service import get_tw_recommendations
 
-    async def _run():
-        result = await get_tw_recommendations(top_n=top_n, max_scan=max_scan)
-        recs = result.get("recommendations", [])
-        buy_list = [{
-            "ticker": r["ticker"], "name": r.get("name", r["ticker"]),
-            "price": r["price"],
-            "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")},
-        } for r in recs]
-        send_combined_report("台股 (FinMind)", buy_list, [], [])
-        logger.info(f"[DailyTW] 完成，推薦 {len(buy_list)} 檔")
-
-    background_tasks.add_task(_run)
-    return {"status": "tw_analysis_started", "top_n": top_n, "max_scan": max_scan}
+    result = await get_tw_recommendations(top_n=top_n, max_scan=max_scan)
+    recs = result.get("recommendations", [])
+    buy_list = [{
+        "ticker": r["ticker"], "name": r.get("name", r["ticker"]),
+        "price": r["price"],
+        "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")},
+    } for r in recs]
+    send_combined_report("台股 (FinMind)", buy_list, [], [])
+    logger.info(f"[DailyTW] 完成，推薦 {len(buy_list)} 檔")
+    return {"status": "success", "recommendations": buy_list}
 
 
 @router.post("/daily-analysis/sell/us")
-async def daily_analysis_sell_us(background_tasks: BackgroundTasks):
+async def daily_analysis_sell_us():
     from src.services.recommendation_service import get_sell_recommendations
-    background_tasks.add_task(get_sell_recommendations, "us")
-    return {"status": "us_sell_analysis_started"}
+    result = await get_sell_recommendations("us")
+    return {"status": "success", "result": result}
 
 
 @router.post("/daily-analysis/sell/tw")
-async def daily_analysis_sell_tw(background_tasks: BackgroundTasks):
+async def daily_analysis_sell_tw():
     from src.services.recommendation_service import get_sell_recommendations
-    background_tasks.add_task(get_sell_recommendations, "tw")
-    return {"status": "tw_sell_analysis_started"}
+    result = await get_sell_recommendations("tw")
+    return {"status": "success", "result": result}
 
 
 # ── Provider 查詢 ─────────────────────────────────────────────────────
