@@ -10,6 +10,7 @@ from .eod_controller import router as eod_router
 from .technical_controller import router as technical_router
 from .ai_news_controller import router as ai_news_router
 from .monitor_controller import router as monitor_router
+from .full_analysis_controller import router as full_analysis_router
 
 __all__ = [
     "health_router",
@@ -24,4 +25,5 @@ __all__ = [
     "technical_router",
     "ai_news_router",
     "monitor_router",
+    "full_analysis_router",
 ]

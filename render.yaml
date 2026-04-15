@@ -35,3 +35,9 @@ services:
         sync: false
       - key: LINE_CHANNEL_SECRET
         sync: false
+
+      # --- AI / 盤中監控 ---
+      - key: GEMINI_API_KEY
+        sync: false      # Google AI Studio 申請免費 key
+      - key: FUGLE_API_KEY
+        sync: false      # Fugle 申請免費 key（盤中監控用）
