@@ -294,6 +294,52 @@ def get_eod_chip(ticker: str, date_str: str = None) -> dict:
     return dict(zip(cols, row))
 
 
+def init_event_db():
+    """初始化事件追蹤資料庫，避免重複通知同一事件"""
+    db_path = os.path.join(os.getcwd(), "data", "events.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS seen_events (
+            event_id TEXT PRIMARY KEY,
+            source   TEXT,
+            ticker   TEXT,
+            title    TEXT,
+            score    INTEGER DEFAULT 0,
+            seen_at  TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def is_event_seen(event_id: str) -> bool:
+    db_path = os.path.join(os.getcwd(), "data", "events.db")
+    if not os.path.exists(db_path):
+        return False
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM seen_events WHERE event_id=?", (event_id,))
+    found = c.fetchone() is not None
+    conn.close()
+    return found
+
+
+def mark_event_seen(event_id: str, source: str, ticker: str, title: str, score: int = 0):
+    db_path = init_event_db()
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute(
+        "INSERT OR IGNORE INTO seen_events (event_id, source, ticker, title, score, seen_at) VALUES (?,?,?,?,?,?)",
+        (event_id, source, ticker, title, score, now),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_all_eod_chip(date_str: str = None) -> list:
     """讀取全部台股的最新 EOD 籌碼面快取"""
     db_path = _eod_db_path()

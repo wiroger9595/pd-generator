@@ -1,0 +1,89 @@
+name: Event Monitor — Real-time Market Alerts
+
+# 事件驅動監控：每 15 分鐘偵測可能影響股價的重大事件
+# 台股盤中：09:00–13:30 TW (UTC 01:00–05:30)
+# 美股盤中：09:30–16:00 ET (UTC 14:30–21:00) + 盤前盤後延伸
+
+on:
+  schedule:
+    # ── 台股盤中 (UTC 01:00–05:30 Mon-Fri) ──────────────────────────────
+    # 每 15 分鐘，覆蓋 09:00–13:45 TW
+    - cron: '0,15,30,45 1 * * 1-5'
+    - cron: '0,15,30,45 2 * * 1-5'
+    - cron: '0,15,30,45 3 * * 1-5'
+    - cron: '0,15,30,45 4 * * 1-5'
+    - cron: '0,15,30,45 5 * * 1-5'
+
+    # ── 美股盤中 (UTC 14:00–21:00 Mon-Fri) ──────────────────────────────
+    # 09:00–16:00 ET (夏令 UTC+4, 冬令 UTC+5)
+    - cron: '0,15,30,45 14 * * 1-5'
+    - cron: '0,15,30,45 15 * * 1-5'
+    - cron: '0,15,30,45 16 * * 1-5'
+    - cron: '0,15,30,45 17 * * 1-5'
+    - cron: '0,15,30,45 18 * * 1-5'
+    - cron: '0,15,30,45 19 * * 1-5'
+    - cron: '0,15,30,45 20 * * 1-5'
+
+  workflow_dispatch:  # 允許手動測試
+    inputs:
+      market:
+        description: '要檢查的市場 (tw / us / both)'
+        required: false
+        default: 'both'
+
+jobs:
+  # ── 台股事件監控 ─────────────────────────────────────────────────────────
+  tw-event-check:
+    runs-on: ubuntu-latest
+    # 台股時段 OR 手動觸發
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.schedule != '' && (
+        startsWith(github.event.schedule, '0,15,30,45 1') ||
+        startsWith(github.event.schedule, '0,15,30,45 2') ||
+        startsWith(github.event.schedule, '0,15,30,45 3') ||
+        startsWith(github.event.schedule, '0,15,30,45 4') ||
+        startsWith(github.event.schedule, '0,15,30,45 5')
+      ))
+    steps:
+      - name: Check TW market events
+        run: |
+          curl -X POST \
+            --connect-timeout 30 \
+            --max-time 60 \
+            --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/events/check/tw"
+          echo "TW event check triggered at $(date -u)"
+
+  # ── 美股事件監控 ─────────────────────────────────────────────────────────
+  us-event-check:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.schedule != '' && (
+        startsWith(github.event.schedule, '0,15,30,45 14') ||
+        startsWith(github.event.schedule, '0,15,30,45 15') ||
+        startsWith(github.event.schedule, '0,15,30,45 16') ||
+        startsWith(github.event.schedule, '0,15,30,45 17') ||
+        startsWith(github.event.schedule, '0,15,30,45 18') ||
+        startsWith(github.event.schedule, '0,15,30,45 19') ||
+        startsWith(github.event.schedule, '0,15,30,45 20')
+      ))
+    steps:
+      - name: Check US market events
+        run: |
+          curl -X POST \
+            --connect-timeout 30 \
+            --max-time 60 \
+            --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/events/check/us"
+          echo "US event check triggered at $(date -u)"
+
+  # ── 保持 Render 伺服器喚醒（所有時段） ──────────────────────────────────
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep Render warm
+        run: |
+          curl --connect-timeout 30 --max-time 60 --retry 2 \
+            -sf "https://pd-generator-2uwi.onrender.com/health" || true

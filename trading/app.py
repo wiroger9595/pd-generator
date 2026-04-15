@@ -33,6 +33,7 @@ from src.controllers import (
     monitor_router,
     full_analysis_router,
     screener_router,
+    event_router,
 )
 
 
@@ -133,6 +134,7 @@ app.include_router(summary_router)
 app.include_router(trade_router)
 app.include_router(full_analysis_router)
 app.include_router(screener_router)
+app.include_router(event_router)
 app.include_router(eod_router)
 app.include_router(technical_router)
 app.include_router(ai_news_router)
