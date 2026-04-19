@@ -55,6 +55,14 @@ jobs:
             -sSf "https://pd-generator-2uwi.onrender.com/api/events/check/tw"
           echo "TW event check triggered at $(date -u)"
 
+      - name: Scan TW volume flow
+        run: |
+          curl -X POST \
+            --connect-timeout 30 \
+            --max-time 60 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/volume-flow/scan/tw" || true
+          echo "TW volume flow scan triggered at $(date -u)"
+
   # ── 美股事件監控 ─────────────────────────────────────────────────────────
   us-event-check:
     runs-on: ubuntu-latest
@@ -78,6 +86,14 @@ jobs:
             --retry 2 \
             -sSf "https://pd-generator-2uwi.onrender.com/api/events/check/us"
           echo "US event check triggered at $(date -u)"
+
+      - name: Scan US volume flow
+        run: |
+          curl -X POST \
+            --connect-timeout 30 \
+            --max-time 60 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/volume-flow/scan/us" || true
+          echo "US volume flow scan triggered at $(date -u)"
 
   # ── 保持 Render 伺服器喚醒（所有時段） ──────────────────────────────────
   keep-alive:
