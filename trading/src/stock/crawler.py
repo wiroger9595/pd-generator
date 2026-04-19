@@ -1,3 +1,5 @@
+import os
+import datetime
 import requests
 import urllib3
 import pandas as pd
@@ -7,6 +9,148 @@ from src.utils.logger import logger
 
 # isin.twse.com.tw 憑證缺少 Subject Key Identifier，停用該 host 的 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+# ── 全市場動能預篩 ──────────────────────────────────────────────────────────
+
+def get_us_market_movers(top_n: int = 80) -> list[dict]:
+    """
+    用 Polygon grouped daily bars 取得全美股昨日表現。
+    以 |change%| × volume 排序，回傳動能最強的 top_n 檔（漲跌皆包含）。
+
+    門檻：收盤價 ≥ $5、成交量 ≥ 100 萬股（過濾仙股與低流動性）
+    資料來源：Polygon /v2/aggs/grouped — 免費方案支援，約 15 分鐘延遲。
+    """
+    api_key = os.getenv("POLYGON_API_KEY", "")
+    if not api_key:
+        logger.warning("[MarketMovers] 無 POLYGON_API_KEY，跳過全市場預篩")
+        return []
+
+    # 往前最多找 5 個交易日（跳過週末 / 假日）
+    for days_back in range(1, 6):
+        date = (datetime.date.today() - datetime.timedelta(days=days_back)).strftime("%Y-%m-%d")
+        try:
+            url = (
+                f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{date}"
+                f"?adjusted=true&apiKey={api_key}"
+            )
+            resp = requests.get(url, timeout=30)
+            data = resp.json()
+            results = data.get("results", [])
+            if results:
+                logger.info(f"[MarketMovers] Polygon grouped daily {date}: {len(results)} 檔")
+                break
+        except Exception as e:
+            logger.debug(f"[MarketMovers] Polygon {date} 失敗: {e}")
+            results = []
+    else:
+        return []
+
+    scored = []
+    for r in results:
+        o = r.get("o", 0)
+        c = r.get("c", 0)
+        v = r.get("v", 0)
+        ticker = r.get("T", "")
+        if not ticker or o <= 0 or c < 5 or v < 1_000_000:
+            continue
+        change_pct = (c - o) / o
+        momentum = abs(change_pct) * v   # 方向不限，漲跌都可能是機會
+        scored.append({
+            "ticker": ticker,
+            "name":   ticker,
+            "change_pct": round(change_pct, 4),
+            "volume":     int(v),
+            "_momentum":  momentum,
+        })
+
+    scored.sort(key=lambda x: x["_momentum"], reverse=True)
+    top = [{"ticker": s["ticker"], "name": s["name"]} for s in scored[:top_n]]
+    logger.info(f"[MarketMovers] US 預篩完成: 取前 {len(top)} 檔高動能標的")
+    return top
+
+
+def get_tw_market_movers(top_n: int = 80) -> list[dict]:
+    """
+    用 TWSE + TPEX OpenAPI 取得最新一日全台股收盤資料。
+    以 |change%| × 成交量 排序，回傳動能最強的 top_n 檔。
+
+    資料來源：
+      上市：https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
+      上櫃：https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes
+    皆為公開免費 API，無需 API Key。
+    """
+    stocks = []
+
+    # ── 上市 (TWSE) ──────────────────────────────────────────────────────
+    try:
+        resp = requests.get(
+            "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+            timeout=15,
+        )
+        for row in resp.json():
+            code = str(row.get("Code", "")).strip()
+            if not (len(code) == 4 and code.isdigit()):
+                continue
+            try:
+                close    = float(str(row.get("ClosingPrice",  "0")).replace(",", "") or 0)
+                open_p   = float(str(row.get("OpeningPrice",  "0")).replace(",", "") or 0)
+                volume   = float(str(row.get("TradeVolume",   "0")).replace(",", "") or 0)
+            except ValueError:
+                continue
+            if close < 10 or volume < 100_000:
+                continue
+            change_pct = (close - open_p) / open_p if open_p > 0 else 0
+            stocks.append({
+                "ticker":    f"{code}.TW",
+                "name":      row.get("Name", code),
+                "change_pct": round(change_pct, 4),
+                "volume":     int(volume),
+                "_momentum":  abs(change_pct) * volume,
+            })
+        logger.info(f"[MarketMovers] TWSE: {len(stocks)} 檔")
+    except Exception as e:
+        logger.warning(f"[MarketMovers] TWSE OpenAPI 失敗: {e}")
+
+    # ── 上櫃 (TPEX) ──────────────────────────────────────────────────────
+    tpex_count = 0
+    try:
+        resp = requests.get(
+            "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
+            timeout=15,
+        )
+        for row in resp.json():
+            code = str(row.get("SecuritiesCompanyCode", "")).strip()
+            if not (len(code) == 4 and code.isdigit()):
+                continue
+            try:
+                close  = float(str(row.get("Close",         "0")).replace(",", "") or 0)
+                open_p = float(str(row.get("Open",          "0")).replace(",", "") or 0)
+                volume = float(str(row.get("TradingShares", "0")).replace(",", "") or 0) / 1000
+            except ValueError:
+                continue
+            if close < 10 or volume < 100_000:
+                continue
+            change_pct = (close - open_p) / open_p if open_p > 0 else 0
+            stocks.append({
+                "ticker":     f"{code}.TWO",
+                "name":       row.get("CompanyName", code),
+                "change_pct": round(change_pct, 4),
+                "volume":     int(volume),
+                "_momentum":  abs(change_pct) * volume,
+            })
+            tpex_count += 1
+        logger.info(f"[MarketMovers] TPEX: {tpex_count} 檔")
+    except Exception as e:
+        logger.warning(f"[MarketMovers] TPEX OpenAPI 失敗: {e}")
+
+    if not stocks:
+        return []
+
+    stocks.sort(key=lambda x: x["_momentum"], reverse=True)
+    top = [{"ticker": s["ticker"], "name": s["name"]} for s in stocks[:top_n]]
+    logger.info(f"[MarketMovers] TW 預篩完成: 取前 {len(top)} 檔高動能標的")
+    return top
 
 def get_tw_stock_list():
     """

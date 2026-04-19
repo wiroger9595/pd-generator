@@ -19,25 +19,47 @@ from src.database.db_handler import get_all_eod_chip, get_all_eod_fundamental
 async def screen_tw_stocks(top_n: int = 5) -> dict:
     """
     台股選股流程：
-    1. 讀 EOD 快取，對全市場每檔股票計算籌碼面 + 基本面分數（零 API）
+    0. 預篩：TWSE + TPEX OpenAPI 全市場動能排序，取前 80 高動能標的
+    1. 讀 EOD 快取，對候選股計算籌碼面 + 基本面分數（零 API）
     2. 篩出分數 ≥ 15 的候選（通常 10–30 檔）
     3. 對候選股並行跑：技術面(FinMind) + 消息面(Google+Gemini)
     4. 四維合併排序，取 top_n 檔
 
-    注意：若 EOD 快取為空（尚未執行 /api/eod/sync/tw），
-          改用既有 chip_service + fundamental_service 掃描
+    注意：若 EOD 快取為空，改用即時掃描（動能預篩結果傳入）
     """
     logger.info("[Screener] 開始台股選股...")
+
+    # ── Phase 0：全市場動能預篩 ────────────────────────────────────────────
+    from src.stock.crawler import get_tw_market_movers
+    loop = asyncio.get_event_loop()
+    movers = await loop.run_in_executor(None, lambda: get_tw_market_movers(top_n=80))
+    movers_set = {m["ticker"].replace(".TW", "").replace(".TWO", "") for m in movers}
+    if movers:
+        logger.info(f"[Screener] TW 全市場預篩: {len(movers)} 檔高動能候選")
 
     # ── Phase 1：EOD 快取預篩 ──────────────────────────────────────────────
     all_chip  = get_all_eod_chip()
     all_fund  = get_all_eod_fundamental()
 
     if all_chip or all_fund:
-        candidates = await _tw_screen_from_cache(all_chip, all_fund, top_n)
+        # 優先處理在動能名單中的股票
+        if movers_set:
+            all_chip_sorted = sorted(
+                all_chip,
+                key=lambda r: (r.get("ticker", "").replace(".TW", "").replace(".TWO", "") in movers_set),
+                reverse=True,
+            )
+            all_fund_sorted = sorted(
+                all_fund,
+                key=lambda r: (r.get("ticker", "").replace(".TW", "").replace(".TWO", "") in movers_set),
+                reverse=True,
+            )
+        else:
+            all_chip_sorted, all_fund_sorted = all_chip, all_fund
+        candidates = await _tw_screen_from_cache(all_chip_sorted, all_fund_sorted, top_n)
     else:
         logger.info("[Screener] EOD 快取為空，改用即時掃描")
-        candidates = await _tw_screen_live(top_n)
+        candidates = await _tw_screen_live(top_n, stock_list=movers or None)
 
     return {
         "status": "success",
@@ -142,21 +164,25 @@ async def _tw_screen_from_cache(all_chip: list, all_fund: list, top_n: int) -> l
     return final
 
 
-async def _tw_screen_live(top_n: int) -> list:
+async def _tw_screen_live(top_n: int, stock_list: list | None = None) -> list:
     """EOD 快取不存在時的備援：用既有服務即時掃描（較慢）"""
-    from src.services.summary_service import get_tw_summary_buy
-    result = await get_tw_summary_buy(top_n=top_n, min_dimensions=2)
-    raw = result.get("results", [])
-    # 轉成 screener 統一格式
+    from src.services.recommendation_service import get_tw_recommendations
+    result = await get_tw_recommendations(
+        top_n=top_n,
+        max_scan=50,
+        stock_list=stock_list,  # 傳入動能預篩結果
+    )
+    raw = result.get("recommendations", [])
     out = []
     for r in raw:
-        dims = r.get("dimensions", {})
         out.append({
             "ticker": r.get("ticker", ""),
-            "name": r.get("name", ""),
-            "overall_score": r.get("total_score", 0),
-            "signal": _overall_signal(r.get("total_score", 0)),
-            "dimensions": dims,
+            "name": r.get("name", r.get("ticker", "")),
+            "overall_score": r.get("score", 0),
+            "signal": _overall_signal(r.get("score", 0)),
+            "dimensions": {
+                "technical": {"score": r.get("score", 0), "reason": r.get("reason", "")},
+            },
         })
     return out
 
@@ -168,21 +194,33 @@ async def _tw_screen_live(top_n: int) -> list:
 async def screen_us_stocks(top_n: int = 5) -> dict:
     """
     美股選股流程：
-    1. 技術面：Polygon + AlphaVantage + Tiingo 三 provider 並行掃描
+    0. 預篩：Polygon grouped daily 全市場動能排序，取前 80 高動能標的
+    1. 技術面：三 provider（Polygon / AV / Tiingo）並行精選評分
     2. 候選股：量能 + 技術共振的前 15 名
-    3. 消息面：對候選股跑 Google News + Gemini
+    3. 消息面：Google News + Gemini 情緒分析
     4. 綜合排序，取 top_n
     """
     logger.info("[Screener] 開始美股選股...")
 
     from src.services.recommendation_service import get_provider_recommendations
     from src.services.ai_news_service import analyze_us_news_sentiment
+    from src.stock.crawler import get_us_market_movers
+
+    # ── Phase 0：全市場動能預篩 ────────────────────────────────────────────
+    loop = asyncio.get_event_loop()
+    market_universe = await loop.run_in_executor(None, lambda: get_us_market_movers(top_n=80))
+    if market_universe:
+        logger.info(f"[Screener] 全市場預篩: {len(market_universe)} 檔高動能候選")
+    else:
+        logger.info("[Screener] 全市場預篩不可用，改用 ETF 持股名單")
+        market_universe = None  # fallback to default list in recommendation_service
 
     # ── Phase 1：三 provider 技術掃描（並行）───────────────────────────────
+    # max_scan=50: 從 80 檔動能股中各取 50 支評分（AV 有每日限額，Polygon/Tiingo 無限）
     poly, av, tiingo = await asyncio.gather(
-        _safe(get_provider_recommendations("polygon",       top_n=20, max_scan=20)),
-        _safe(get_provider_recommendations("alpha_vantage", top_n=20, max_scan=20)),
-        _safe(get_provider_recommendations("tiingo",        top_n=20, max_scan=20)),
+        _safe(get_provider_recommendations("polygon",       top_n=20, max_scan=50, stock_list=market_universe)),
+        _safe(get_provider_recommendations("alpha_vantage", top_n=20, max_scan=25, stock_list=market_universe)),
+        _safe(get_provider_recommendations("tiingo",        top_n=20, max_scan=50, stock_list=market_universe)),
     )
 
     # 合併三 provider（同 ticker 取最高分，額外加成）
