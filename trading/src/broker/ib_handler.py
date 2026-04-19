@@ -17,6 +17,7 @@ class IBHandler(BaseBroker):
         self.ib.errorEvent += self.on_error # 註冊錯誤處理
         self._loop = None
         self._thread = None
+        self._tick_subs: dict = {}  # symbol -> (ticker, on_update_fn)
 
     def on_error(self, req_id, error_code, error_string, contract):
         """
@@ -185,6 +186,60 @@ class IBHandler(BaseBroker):
                 "analyst_rating": float(rating.text) if rating is not None else None
             }
         except: return None
+
+    # ── Tick-by-Tick 串流 ─────────────────────────────────────────────────
+
+    async def subscribe_ticks(self, symbol: str, on_tick_cb) -> bool:
+        """
+        訂閱美股逐筆成交串流。
+        on_tick_cb(symbol, price, size) 在每筆成交時被呼叫（在 IB 背景 thread）。
+        """
+        if not await self.connect():
+            return False
+        if symbol in self._tick_subs:
+            return True
+
+        async def _sub():
+            contract = Stock(symbol, 'SMART', 'USD')
+            qualified = await self.ib.qualifyContractsAsync(contract)
+            if not qualified:
+                logger.warning(f"[TickStream] 無法解析合約: {symbol}")
+                return
+            ticker = self.ib.reqTickByTickData(qualified[0], 'AllLast', 0, False)
+
+            def on_update(t):
+                new_ticks = list(t.tickByTicks)
+                t.tickByTicks.clear()
+                for tick in new_ticks:
+                    if tick.price > 0 and tick.size > 0:
+                        on_tick_cb(symbol, float(tick.price), float(tick.size))
+
+            ticker.updateEvent += on_update
+            self._tick_subs[symbol] = (ticker, on_update)
+            logger.info(f"[TickStream] 已訂閱 {symbol} 逐筆成交")
+
+        future = asyncio.run_coroutine_threadsafe(_sub(), self._loop)
+        await asyncio.wrap_future(future)
+        return symbol in self._tick_subs
+
+    def unsubscribe_ticks(self, symbol: str):
+        """取消單一標的的 tick 訂閱"""
+        if symbol not in self._tick_subs:
+            return
+        ticker, on_update = self._tick_subs.pop(symbol)
+        ticker.updateEvent -= on_update
+        try:
+            self._loop.call_soon_threadsafe(
+                lambda: self.ib.cancelTickByTickData(ticker.contract)
+            )
+        except Exception as e:
+            logger.debug(f"[TickStream] cancel {symbol}: {e}")
+        logger.info(f"[TickStream] 已取消訂閱 {symbol}")
+
+    def unsubscribe_all_ticks(self):
+        """取消所有 tick 訂閱"""
+        for symbol in list(self._tick_subs.keys()):
+            self.unsubscribe_ticks(symbol)
 
     async def place_order(self, symbol, action, quantity, order_type='MARKET', price=None, take_profit=None, trailing_percent=None):
         """

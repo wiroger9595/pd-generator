@@ -35,6 +35,7 @@ from src.controllers import (
     screener_router,
     event_router,
     volume_flow_router,
+    tick_stream_router,
 )
 
 
@@ -65,8 +66,16 @@ async def lifespan(app: FastAPI):
         logger.info("📅 排程器已停用，由外部 cron 觸發")
 
     await app.state.broker_manager.connect_all()
+
+    # IB Tick-by-Tick 即時量能監控
+    from src.services.tick_stream_service import TickStreamService
+    ib_handler = app.state.broker_manager.us_broker
+    app.state.tick_stream = TickStreamService(ib_handler)
+    await _auto_subscribe_tick_stream(app.state.tick_stream)
+
     yield
     logger.info("👋 Trading System 關閉中...")
+    app.state.tick_stream.stop_all()
     await app.state.broker_manager.disconnect_all()
     if hasattr(app.state, "scheduler"):
         app.state.scheduler.shutdown()
@@ -121,6 +130,26 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
     _add(SCHEDULE_CONFIG.get("SELL_SCAN_US_TIME", "07:17"), get_sell_recommendations, ["us"])
 
 
+async def _auto_subscribe_tick_stream(tick_stream):
+    """啟動時自動訂閱美股庫存 + 觀察名單的逐筆成交串流（需 IB 已連線）"""
+    try:
+        from src.database.db_handler import get_active_tickers
+        active = get_active_tickers("us")
+        tickers = list({
+            h["ticker"] for h in active.get("holdings", [])
+        } | {
+            w["ticker"] for w in active.get("watched", [])
+        })
+        if tickers:
+            for t in tickers:
+                await tick_stream.start_watching(t)
+            logger.info(f"📡 TickStream 自動訂閱 {len(tickers)} 檔美股: {tickers}")
+        else:
+            logger.info("📡 TickStream 啟動（無庫存/觀察名單，可透過 API 手動訂閱）")
+    except Exception as e:
+        logger.warning(f"📡 TickStream 自動訂閱失敗（IB 未連線？）: {e}")
+
+
 # ── FastAPI 應用 ──────────────────────────────────────────────────────
 
 app = FastAPI(title="Trading System API", version="2.0", lifespan=lifespan)
@@ -141,6 +170,7 @@ app.include_router(eod_router)
 app.include_router(technical_router)
 app.include_router(ai_news_router)
 app.include_router(monitor_router)
+app.include_router(tick_stream_router)
 
 
 if __name__ == "__main__":

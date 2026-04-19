@@ -14,6 +14,7 @@ from .full_analysis_controller import router as full_analysis_router
 from .screener_controller import router as screener_router
 from .event_controller import router as event_router
 from .volume_flow_controller import router as volume_flow_router
+from .tick_stream_controller import router as tick_stream_router
 
 __all__ = [
     "health_router",
@@ -32,4 +33,5 @@ __all__ = [
     "screener_router",
     "event_router",
     "volume_flow_router",
+    "tick_stream_router",
 ]
