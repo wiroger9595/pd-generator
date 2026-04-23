@@ -23,6 +23,8 @@ class IBHandler(BaseBroker):
         self._loop = None
         self._thread = None
         self._tick_subs: dict = {}  # symbol -> (ticker, on_update_fn)
+        self._connect_failed_at: float = 0.0  # 上次連線失敗的 timestamp
+        self._connect_retry_secs: float = 60.0  # 失敗後冷卻秒數
 
         IB, *_ = _ib_import()
         if IB is None:
@@ -92,30 +94,34 @@ class IBHandler(BaseBroker):
 
     async def connect(self):
         """透過背景執行緒建立連線"""
+        import time
         if self.ib is None:
             return False  # ib_insync 未安裝
-        self.start() # 確保執行緒在跑
 
-        if not self.ib.isConnected():
-            mode_str = "[模擬交易]" if self.is_sim else "[正式交易]"
-            logger.info(f"🔄 嘗試連線至 IBKR {mode_str} {self.host}:{self.port}")
-            try:
-                # 關鍵：將任務送到專屬執行緒的 loop 執行
-                future = asyncio.run_coroutine_threadsafe(
-                    self.ib.connectAsync(self.host, self.port, clientId=self.client_id),
-                    self._loop
-                )
-                await asyncio.wrap_future(future)
-                
-                # 關鍵修正：允許獲取延遲行情 (解決無法獲取現價的問題)
-                self.ib.reqMarketDataType(3) 
-                
-                logger.info(f"✅ 成功連線至 IBKR (已開啟延遲行情)")
-                return True
-            except Exception as e:
-                logger.error(f"❌ 連線 IBKR 失敗: {e}")
-                return False
-        return True
+        if self.ib.isConnected():
+            return True
+
+        # 若上次連線失敗未超過冷卻時間，直接回傳 False，不重試
+        if self._connect_failed_at and (time.time() - self._connect_failed_at) < self._connect_retry_secs:
+            return False
+
+        self.start()  # 確保執行緒在跑
+        mode_str = "[模擬交易]" if self.is_sim else "[正式交易]"
+        logger.info(f"🔄 嘗試連線至 IBKR {mode_str} {self.host}:{self.port}")
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.ib.connectAsync(self.host, self.port, clientId=self.client_id),
+                self._loop
+            )
+            await asyncio.wrap_future(future)
+            self.ib.reqMarketDataType(3)
+            self._connect_failed_at = 0.0  # 連線成功，重置失敗計時
+            logger.info("✅ 成功連線至 IBKR (已開啟延遲行情)")
+            return True
+        except Exception as e:
+            self._connect_failed_at = time.time()  # 記錄失敗時間
+            logger.error(f"❌ 連線 IBKR 失敗: {e}")
+            return False
 
     def disconnect(self):
         if self.ib and self.ib.isConnected():

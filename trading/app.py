@@ -133,6 +133,12 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
 async def _auto_subscribe_tick_stream(tick_stream):
     """啟動時自動訂閱美股庫存 + 觀察名單的逐筆成交串流（需 IB 已連線）"""
     try:
+        # 先試一次連線，失敗就整批跳過，避免每個 ticker 各重試一次
+        ib = tick_stream._ib
+        if not await ib.connect():
+            logger.info("📡 TickStream: IB 未連線，跳過自動訂閱（可啟動 TWS 後呼叫 /api/tick-stream/subscribe）")
+            return
+
         from src.database.db_handler import get_active_tickers
         active = get_active_tickers("us")
         tickers = list({
