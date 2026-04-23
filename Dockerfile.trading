@@ -14,4 +14,7 @@ COPY . .
 
 EXPOSE 8002
 
-CMD ["sh", "-c", "cd /app/trading && PYTHONPATH=/app/trading uvicorn app:app --host 0.0.0.0 --port ${PORT:-8002}"]
+# --workers 1        : 單一 process，避免 fork 複製記憶體
+# --limit-max-requests 500 : 每 500 個請求自動重啟 worker，防止記憶體緩慢洩漏
+# --timeout-keep-alive 5   : 關閉閒置連線，釋放記憶體
+CMD ["sh", "-c", "cd /app/trading && PYTHONPATH=/app/trading uvicorn app:app --host 0.0.0.0 --port ${PORT:-8002} --workers 1 --limit-max-requests 500 --timeout-keep-alive 5"]

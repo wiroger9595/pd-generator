@@ -1,8 +1,9 @@
 import os
-import ccxt.pro as ccxt  # 使用支援非同步非同步版本的 CCXT
 import asyncio
 from .base import BaseBroker
 from src.utils.logger import logger
+
+# ccxt.pro 延遲載入 — 約 100MB，只在實際連線時才載入
 
 class CryptoHandler(BaseBroker):
     """
@@ -21,6 +22,7 @@ class CryptoHandler(BaseBroker):
     async def connect(self):
         if self.is_connected: return True
         try:
+            import ccxt.pro as ccxt  # 延遲載入，避免啟動時佔用記憶體
             # 動態初始化交易所類別
             exchange_class = getattr(ccxt, self.exchange_id)
             config = {

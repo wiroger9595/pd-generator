@@ -1,5 +1,6 @@
-from tradingview_ta import TA_Handler, Interval, Exchange
 from .base import BaseDataProvider
+
+# tradingview_ta 延遲載入 — 約 30MB，只在實際呼叫時才載入
 
 class TradingViewProvider(BaseDataProvider):
     """
@@ -18,6 +19,7 @@ class TradingViewProvider(BaseDataProvider):
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                from tradingview_ta import TA_Handler, Interval, Exchange  # 延遲載入
                 handler = TA_Handler(
                     symbol=symbol,
                     screener=market.lower(),

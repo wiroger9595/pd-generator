@@ -1,11 +1,18 @@
 import os
 import asyncio
 import threading
-from ib_insync import IB, Stock, MarketOrder, LimitOrder, Order
-from .base import BaseBroker
-from src.utils.logger import logger
 import re
 import xml.etree.ElementTree as ET
+from .base import BaseBroker
+from src.utils.logger import logger
+
+# ib_insync 延遲載入 — 在 Render 等雲端環境中不安裝，避免浪費 ~80MB 記憶體
+def _ib_import():
+    try:
+        from ib_insync import IB, Stock, MarketOrder, LimitOrder, Order
+        return IB, Stock, MarketOrder, LimitOrder, Order
+    except ImportError:
+        return None, None, None, None, None
 
 class IBHandler(BaseBroker):
     def __init__(self, host='127.0.0.1', port=7497, client_id=1):
@@ -13,11 +20,17 @@ class IBHandler(BaseBroker):
         self.port = port
         self.client_id = client_id
         self.is_sim = os.getenv("US_IS_SIMULATION", "false").lower() == "true"
-        self.ib = IB()
-        self.ib.errorEvent += self.on_error # 註冊錯誤處理
         self._loop = None
         self._thread = None
         self._tick_subs: dict = {}  # symbol -> (ticker, on_update_fn)
+
+        IB, *_ = _ib_import()
+        if IB is None:
+            logger.warning("[IBHandler] ib_insync 未安裝，IB 功能停用")
+            self.ib = None
+            return
+        self.ib = IB()
+        self.ib.errorEvent += self.on_error
 
     def on_error(self, req_id, error_code, error_string, contract):
         """
@@ -79,8 +92,10 @@ class IBHandler(BaseBroker):
 
     async def connect(self):
         """透過背景執行緒建立連線"""
+        if self.ib is None:
+            return False  # ib_insync 未安裝
         self.start() # 確保執行緒在跑
-        
+
         if not self.ib.isConnected():
             mode_str = "[模擬交易]" if self.is_sim else "[正式交易]"
             logger.info(f"🔄 嘗試連線至 IBKR {mode_str} {self.host}:{self.port}")
@@ -109,7 +124,10 @@ class IBHandler(BaseBroker):
     async def get_market_scanner_results(self, scan_code='TOP_PERCENT_GAIN', num_rows=25):
         """[專業級] 調裝 IBKR 伺服器端掃描器 (Thread-Safe)"""
         if not await self.connect(): return []
-        from ib_insync import ScannerSubscription, TagValue
+        try:
+            from ib_insync import ScannerSubscription, TagValue
+        except ImportError:
+            return []
         sub = ScannerSubscription(instrument='STK', locationCode='STK.US.MAJOR', scanCode=scan_code)
         filter_tags = [TagValue('priceAbove', '5'), TagValue('volumeAbove', '500000')]
         try:
