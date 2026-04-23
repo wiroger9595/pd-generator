@@ -158,7 +158,46 @@ async def _auto_subscribe_tick_stream(tick_stream):
 
 # ── FastAPI 應用 ──────────────────────────────────────────────────────
 
-app = FastAPI(title="Trading System API", version="2.0", lifespan=lifespan)
+_TAGS = [
+    {"name": "Health",       "description": "伺服器健康檢查"},
+    {"name": "Screener",     "description": "📊 **全市場選股** — 從全美股/台股動能預篩，多維評分找出最佳候選"},
+    {"name": "FullAnalysis", "description": "🔬 **單檔深度分析** — 籌碼 + 基本面 + 技術 + 消息四維一體"},
+    {"name": "Analysis",     "description": "📈 **每日分析** — 買進/賣出建議，結果發 LINE"},
+    {"name": "Summary",      "description": "📋 **四維彙整** — 合併多面向掃描結果發 LINE"},
+    {"name": "VolumeFlow",   "description": "💹 **買賣量流向** — Tick Rule / OHLCV 估算即時資金方向"},
+    {"name": "TickStream",   "description": "⚡ **IB 即時 Tick 串流** — reqTickByTickData 事件驅動 CVD（需 IB Gateway）"},
+    {"name": "Events",       "description": "🚨 **重大事件偵測** — Google News + Gemini 評分，盤中每 15 分鐘觸發"},
+    {"name": "Technical",    "description": "📐 **技術指標** — RSI / MACD / 均線 (FinMind / Alpha Vantage)"},
+    {"name": "AiNews",       "description": "📰 **AI 新聞情緒** — Gemini 對單檔個股新聞評分 1–10"},
+    {"name": "Chip",         "description": "🏦 **籌碼面** — 法人買賣超、外資持股"},
+    {"name": "Fundamental",  "description": "💰 **基本面** — EPS、ROE、本益比"},
+    {"name": "News",         "description": "📡 **消息面** — Google News RSS 掃描"},
+    {"name": "EOD",          "description": "🗄️ **EOD 快取** — 盤後批次同步籌碼+基本面到 SQLite"},
+    {"name": "Monitor",      "description": "👁️ **盤中監控** — 台股盤中即時異常偵測"},
+    {"name": "Trade",        "description": "🤖 **自動交易** — 美股 IB / 台股永豐 / 玉山下單"},
+]
+
+app = FastAPI(
+    title="Trading System API",
+    version="2.0",
+    description="""
+量化交易分析系統 — 透過此介面直接測試所有 API，無需 Postman。
+
+## 快速開始
+1. **選股**：`POST /api/screener/tw` 或 `/api/screener/us`
+2. **單檔分析**：`GET /api/full-analysis/us/AAPL`
+3. **即時量能**：`GET /api/volume-flow/us/AAPL`
+4. **事件偵測**：`POST /api/events/check/us`
+
+## 資料來源
+- 台股：Fugle（盤中）/ FinMind（歷史）/ TWSE OpenAPI
+- 美股：Polygon / Alpha Vantage / Tiingo
+- AI 分析：Google Gemini
+- 下單：Interactive Brokers / 永豐金 Shioaji
+""",
+    lifespan=lifespan,
+    openapi_tags=_TAGS,
+)
 
 app.include_router(health_router)
 app.include_router(line_router)
