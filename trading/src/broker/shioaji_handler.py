@@ -13,20 +13,18 @@ class ShioajiHandler(BaseBroker):
 
     async def connect(self):
         if self.is_connected: return True
+        # 先確認有憑證再載入函式庫，避免在雲端空載入 ~50MB 的 shioaji
+        api_key = os.getenv("SHIOAJI_API_KEY")
+        secret_key = os.getenv("SHIOAJI_SECRET_KEY")
+        if not api_key or not secret_key:
+            logger.debug("永豐金 API Key 未設定，跳過連線")
+            return False
         try:
             import shioaji as sj
-            # 延遲匯入，避免沒安裝套件就報錯
             is_sim = os.getenv("TW_IS_SIMULATION", "false").lower() == "true"
             self.api = sj.Shioaji(simulation=is_sim)
-            
-            api_key = os.getenv("SHIOAJI_API_KEY")
-            secret_key = os.getenv("SHIOAJI_SECRET_KEY")
             cert_path = os.getenv("SHIOAJI_CERT_PATH")
             cert_pass = os.getenv("SHIOAJI_CERT_PASSWORD")
-
-            if not api_key or not secret_key:
-                logger.error("❌ 缺少永豐金 API Key/Secret")
-                return False
 
             self.api.login(api_key, secret_key)
             

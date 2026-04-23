@@ -6,9 +6,10 @@ ENV PYTHONPATH=/app/trading
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir "TA-Lib>=0.4.28" APScheduler
+# 雲端只裝必要套件，排除 ib_insync / shioaji / ccxt（合計 ~200MB RAM）
+COPY requirements.cloud.txt .
+RUN pip install --no-cache-dir -r requirements.cloud.txt
+RUN pip install --no-cache-dir "TA-Lib>=0.4.28"
 
 COPY . .
 

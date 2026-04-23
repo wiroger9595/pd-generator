@@ -1,0 +1,33 @@
+# ── 雲端部署依賴（Render / Docker）─────────────────────────────────────────
+# 不含本機交易專用套件（ib_insync / shioaji / ccxt / tradingview-ta）
+# 這些套件合計佔用 200–300MB RAM，在雲端只要能分析行情即可，不需要實際下單
+
+# Web framework
+fastapi
+uvicorn
+python-multipart
+
+# Data & analysis
+numpy
+pandas
+requests
+python-dotenv
+lxml
+html5lib
+beautifulsoup4
+
+# LINE Bot
+line-bot-sdk
+
+# Scheduling (local mode fallback)
+APScheduler>=3.10.0
+
+# News & AI
+feedparser
+google-generativeai
+
+# Taiwan market (Fugle intraday)
+fugle-marketdata
+
+# Async utilities
+nest_asyncio

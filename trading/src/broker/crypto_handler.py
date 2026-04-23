@@ -21,6 +21,10 @@ class CryptoHandler(BaseBroker):
 
     async def connect(self):
         if self.is_connected: return True
+        # 先確認有憑證或明確啟用才載入 ccxt（~100MB）
+        if not self.api_key and not self.is_demo:
+            logger.debug("Crypto API Key 未設定且非 demo 模式，跳過連線")
+            return False
         try:
             import ccxt.pro as ccxt  # 延遲載入，避免啟動時佔用記憶體
             # 動態初始化交易所類別
