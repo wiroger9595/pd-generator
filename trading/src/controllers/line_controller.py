@@ -17,6 +17,49 @@ from src.utils.logger import logger
 router = APIRouter(tags=["LINE"])
 
 
+@router.post("/api/line/test", summary="LINE 推播診斷 — 傳送測試訊息並顯示 API 回應")
+async def line_test():
+    """
+    對所有設定的 Bot + User 發送一則測試訊息，並回傳每筆 LINE API 的 HTTP 狀態碼與回應內容。
+    用途：在 Swagger 確認 Token / User ID / 配額是否正常。
+    """
+    import time
+    configs = get_line_bot_configs()
+    if not configs:
+        return {"error": "未找到任何 LINE Bot 設定 (LINE_BOT_1_TOKEN 或 LINE_CHANNEL_ACCESS_TOKEN)"}
+
+    results = []
+    msg = f"[Trading System 診斷] LINE 連線測試 {time.strftime('%Y-%m-%d %H:%M:%S')} — 如收到此訊息表示推播正常 ✅"
+
+    for i, cfg in enumerate(configs):
+        token = cfg["token"]
+        users = cfg["users"]
+        if not users:
+            results.append({"bot_index": i + 1, "token_prefix": token[:12] + "...", "error": "users 清單為空，請設定 LINE_USER_ID 或 LINE_BOT_1_USERS"})
+            continue
+        for uid in users:
+            payload = {"to": uid, "messages": [{"type": "text", "text": msg}]}
+            try:
+                r = http_requests.post(
+                    "https://api.line.me/v2/bot/message/push",
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    json=payload,
+                    timeout=15,
+                )
+                results.append({
+                    "bot_index": i + 1,
+                    "token_prefix": token[:12] + "...",
+                    "user_id": uid,
+                    "status_code": r.status_code,
+                    "response": r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text,
+                    "ok": r.status_code == 200,
+                })
+            except Exception as e:
+                results.append({"bot_index": i + 1, "user_id": uid, "error": str(e)})
+
+    return {"sent": len([r for r in results if r.get("ok")]), "total": len(results), "details": results}
+
+
 def _build_parsers(secrets: list[str]) -> list[WebhookParser]:
     return [WebhookParser(s) for s in secrets if s]
 
