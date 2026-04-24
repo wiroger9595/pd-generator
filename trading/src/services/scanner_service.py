@@ -9,7 +9,6 @@ from src.stock.crawler import get_tw_stock_list, get_us_stock_list, get_crypto_s
 from src.stock.fetcher import fetch_history
 from src.strategies.comprehensive_strategy import ComprehensiveStrategy
 from src.strategies.crypto_strategy import CryptoStrategy
-from src.utils.notifier import send_combined_report
 from src.database.db_handler import (
     save_to_db, get_active_tickers, record_buy, record_sell
 )
@@ -221,7 +220,6 @@ async def run_scan(market, trading_service=None):
 
     # 8. 存檔與推送通知
     if buy_signals: save_to_db(buy_signals, market)
-    send_combined_report(market.upper(), buy_signals, sell_holdings, sell_watched)
     
     # 9. 獵人自動交易
     if AUTO_TRADE_ENABLED and trading_service:

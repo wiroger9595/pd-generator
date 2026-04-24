@@ -346,9 +346,7 @@ async def run_daily_analysis(top_n: int = 5, max_scan_us: int = 20, max_scan_tw:
     每日分析主函式：
     - 美股：依序跑 AlphaVantage、Polygon、Tiingo，合併結果（多家 provider 同時推薦 → 加分）
     - 台股：FinMind
-    - 結果發送至 LINE
     """
-    from src.utils.notifier import send_combined_report
 
     # --- 美股：三大 provider 依序掃描（避免同時觸發 rate limit） ---
     us_merged: dict[str, dict] = {}
@@ -393,9 +391,6 @@ async def run_daily_analysis(top_n: int = 5, max_scan_us: int = 20, max_scan_tw:
                 "buy_points": {"score": r["score"], "reason": reason},
             })
         return out
-
-    send_combined_report("美股 (AV/Polygon/Tiingo)", _to_notifier(us_top), [], [])
-    send_combined_report("台股 (FinMind)", _to_notifier(tw_top), [], [])
 
     logger.info(f"[DailyAnalysis] 完成：美股推薦 {len(us_top)} 檔，台股推薦 {len(tw_top)} 檔")
     return {
@@ -483,10 +478,7 @@ async def get_sell_recommendations(market: str) -> dict:
             "sell_reason": r["sell_reason"],
         } for r in items]
 
-    market_label = "美股" if market == "us" else "台股"
-    send_combined_report(f"{market_label} 賣出掃描", [], _fmt(sell_holdings), _fmt(sell_watched))
-
-    logger.info(f"[SellScan] {market.upper()} 完成：庫存賣訊 {len(sell_holdings)} | 觀察賣訊 {len(sell_watched)}，已發 LINE")
+    logger.info(f"[SellScan] {market.upper()} 完成：庫存賣訊 {len(sell_holdings)} | 觀察賣訊 {len(sell_watched)}")
     return {
         "status": "ok",
         "market": market.upper(),

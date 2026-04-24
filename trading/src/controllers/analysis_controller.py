@@ -7,7 +7,6 @@ import time
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from src.utils.notifier import send_combined_report
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/api", tags=["Analysis"])
@@ -66,7 +65,6 @@ async def daily_analysis_buy_us(
             "buy_points": {"score": r["score"], "reason": reason},
         })
 
-    send_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
     logger.info(f"[DailyUS] 完成，推薦 {len(buy_list)} 檔")
     return {"status": "success", "recommendations": buy_list}
 
@@ -86,7 +84,6 @@ async def daily_analysis_buy_tw(
         "price": r["price"],
         "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")},
     } for r in recs]
-    send_combined_report("台股 (FinMind)", buy_list, [], [])
     logger.info(f"[DailyTW] 完成，推薦 {len(buy_list)} 檔")
     return {"status": "success", "recommendations": buy_list}
 

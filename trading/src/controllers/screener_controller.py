@@ -1,6 +1,6 @@
 """
 選股 Controller  —  /api/screener/*
-主動掃描全市場，找出多維共振的最佳標的，結果直接回傳並發 LINE
+主動掃描全市場，找出多維共振的最佳標的，結果直接回傳（不發 LINE，由 summary 統一發送）
 台股：EOD 快取(籌碼+基本) → 技術面(FinMind) → 消息面(Google+Gemini)
 美股：技術面(Polygon/AV/Tiingo) → 消息面(Google+Gemini)
 """
@@ -11,54 +11,44 @@ router = APIRouter(prefix="/api/screener", tags=["Screener"])
 
 
 @router.post("/tw")
-async def screener_tw(
-    top_n: int = Query(5, description="回傳前幾檔"),
-):
+async def screener_tw(top_n: int = Query(5, description="回傳前幾檔")):
     """
-    台股主動選股（直接回傳結果並發 LINE）
+    台股主動選股
 
     **流程**：
     1. 讀 EOD SQLite 快取 → 籌碼面 + 基本面預篩（零 API 消耗）
     2. 對候選股跑技術面（FinMind 即時計算）
     3. 對候選股跑消息面（Google News RSS + Gemini AI）
-    4. 四維合併排序 → 回傳 + 發 LINE
+    4. 四維合併排序 → 回傳
 
     *若 EOD 快取為空，改用即時 FinMind 掃描（較慢）*
     """
     from src.services.screener_service import screen_tw_stocks
-    from src.utils.notifier import send_screener_report
 
     result = await screen_tw_stocks(top_n=top_n)
-    results = result.get("results", [])
-    send_screener_report("台股", results)
     logger.info(
-        f"[Screener] 台股選股完成，候選 {result.get('total_candidates',0)} 檔，"
-        f"回傳 {len(results)} 檔"
+        f"[Screener] 台股選股完成，候選 {result.get('total_candidates', 0)} 檔，"
+        f"回傳 {len(result.get('results', []))} 檔"
     )
     return result
 
 
 @router.post("/us")
-async def screener_us(
-    top_n: int = Query(5, description="回傳前幾檔"),
-):
+async def screener_us(top_n: int = Query(5, description="回傳前幾檔")):
     """
-    美股主動選股（直接回傳結果並發 LINE）
+    美股主動選股
 
     **流程**：
     1. 技術面：Polygon + Alpha Vantage + Tiingo 三 provider 並行掃描
     2. 取技術共振前 15 名候選股
     3. 對候選股跑消息面（Google News RSS + Gemini AI）
-    4. 合併排序 → 回傳 + 發 LINE
+    4. 合併排序 → 回傳
     """
     from src.services.screener_service import screen_us_stocks
-    from src.utils.notifier import send_screener_report
 
     result = await screen_us_stocks(top_n=top_n)
-    results = result.get("results", [])
-    send_screener_report("美股", results)
     logger.info(
-        f"[Screener] 美股選股完成，候選 {result.get('total_candidates',0)} 檔，"
-        f"回傳 {len(results)} 檔"
+        f"[Screener] 美股選股完成，候選 {result.get('total_candidates', 0)} 檔，"
+        f"回傳 {len(result.get('results', []))} 檔"
     )
     return result
