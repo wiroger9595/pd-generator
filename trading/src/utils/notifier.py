@@ -7,6 +7,7 @@ from src.database.db_handler import get_all_users
 
 load_dotenv()
 
+
 def get_line_bot_configs():
     """解析 .env 中的分組設定，回傳 [{token, users}, ...]"""
     configs = []
@@ -14,91 +15,100 @@ def get_line_bot_configs():
     while True:
         token = os.getenv(f"LINE_BOT_{i}_TOKEN")
         if not token:
-            # 相容舊格式 (例如 LINE_CHANNEL_ACCESS_TOKEN=token1,token2)
+            # 舊格式：只用第一個 token（多 token 但 users 相同會重複發，浪費額度）
             if i == 1:
                 tokens = [t.strip() for t in os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "").split(",") if t.strip()]
                 users = [u.strip() for u in os.getenv("LINE_USER_ID", "").split(",") if u.strip().startswith("U")]
-                for t in tokens:
-                    configs.append({"token": t, "users": users})
+                if tokens:
+                    configs.append({"token": tokens[0], "users": users})
             break
-        
+
         users = [u.strip() for u in os.getenv(f"LINE_BOT_{i}_USERS", "").split(",") if u.strip().startswith("U")]
         configs.append({"token": token, "users": users})
         i += 1
     return configs
 
+
+def _multicast(token: str, users: list[str], text: str) -> int:
+    """用 multicast 一次送給多人，回傳成功送出的人數。"""
+    if not users:
+        return 0
+    # LINE multicast 上限 500 人，超過切批
+    sent = 0
+    for batch_start in range(0, len(users), 500):
+        batch = users[batch_start:batch_start + 500]
+        payload = {"to": batch, "messages": [{"type": "text", "text": text}]}
+        try:
+            r = requests.post(
+                "https://api.line.me/v2/bot/message/multicast",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                json=payload,
+                timeout=15,
+            )
+            if r.status_code == 200:
+                sent += len(batch)
+            else:
+                print(f"⚠️ [LINE] multicast 失敗 ({token[:12]}...): {r.text}")
+        except Exception as e:
+            print(f"❌ [LINE] 發送異常: {e}")
+    return sent
+
+
+def _collect_users(config: dict, db_users: list[str]) -> list[str]:
+    return list({u for u in (config["users"] + db_users) if u.startswith("U")})
+
+
 def format_stock_info(s):
     price_info = f"${s['price']}" if 'price' in s else "N/A"
-    # 新結構：reason 在 buy_points 或 sell_reason 中
     reason = s.get('buy_points', {}).get('reason', '') or s.get('sell_reason', '') or '技術訊號'
     score = s.get('buy_points', {}).get('score', 0)
     score_info = f" (評分:{int(score)})" if score > 0 else ""
     return f"• {s['name']} ({s['ticker']})\n  現價: {price_info}{score_info} | {reason}\n"
 
+
 def send_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[]):
     """發送結合 買進 與 賣出 建議的 LINE 通知"""
     bot_configs = get_line_bot_configs()
     db_users = get_all_users()
-
     if not bot_configs and not db_users:
         print("⚠️ [LINE] 未設定任何 Token 或 User ID，跳過通知")
         return
 
     header = f"【📊 {market_name} 盤後掃描報告】\n日期: {time.strftime('%Y-%m-%d')}\n{'='*15}\n\n"
     body = ""
-    
+
     if sell_holdings:
         body += "⚠️ 【！！庫存賣出警示！！】\n"
-        for s in sell_holdings: body += format_stock_info(s)
+        for s in sell_holdings:
+            body += format_stock_info(s)
         body += "\n"
 
     if buy_stocks:
         body += "🚀 【建議買進 (爆量長紅)】\n"
-        for s in buy_stocks: body += format_stock_info(s)
+        for s in buy_stocks:
+            body += format_stock_info(s)
         body += "\n"
 
     if sell_watched:
         body += "🛑 【觀察名單賣出建議】\n"
-        for s in sell_watched: body += format_stock_info(s)
+        for s in sell_watched:
+            body += format_stock_info(s)
         body += "\n"
-        
+
     if not body:
         body = "今日無特別買賣訊號。\n"
-        
-    footer = f"{'='*15}\n投資有風險，請獨立判斷。"
-    full_msg = header + body + footer
 
-    # 執行廣發
+    full_msg = header + body + f"{'='*15}\n投資有風險，請獨立判斷。"
+
     total_sent = 0
     for config in bot_configs:
-        token = config['token']
-        # 合併該 Bot 的固定名單與資料庫動態名單
-        target_users = list(set(config['users'] + db_users))
-        target_users = [u for u in target_users if u.startswith("U")]
-
-        for uid in target_users:
-            payload = {
-                "to": uid,
-                "messages": [{"type": "text", "text": full_msg}]
-            }
-            try:
-                r = requests.post(
-                    "https://api.line.me/v2/bot/message/push", 
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    data=json.dumps(payload),
-                    timeout=15
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-                else:
-                    print(f"⚠️ [LINE] Bot ({token[:10]}...) 對 {uid} 發送失敗: {r.text}")
-            except Exception as e:
-                print(f"❌ [LINE] 發送異常: {e}")
-
+        total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
     print(f"✅ [LINE] 綜合報告發送完成，共送出 {total_sent} 則訊息。")
+
 
 def send_line_report(market_name, stocks):
     send_combined_report(market_name, buy_stocks=stocks, sell_holdings=[], sell_watched=[])
+
 
 def send_fundamental_report(market_name: str, signal_type: str, items: list):
     """
@@ -123,35 +133,16 @@ def send_fundamental_report(market_name: str, signal_type: str, items: list):
     if not items:
         body = f"今日無基本面{label}訊號。\n"
     else:
-        body = ""
-        for s in items:
-            body += f"• {s.get('name', '')} ({s.get('ticker', '')})\n"
-            body += f"  評分: {s.get('score', 0)} | {s.get('reason', '')}\n"
+        body = "".join(
+            f"• {s.get('name', '')} ({s.get('ticker', '')})\n  評分: {s.get('score', 0)} | {s.get('reason', '')}\n"
+            for s in items
+        )
 
-    footer = f"\n{'='*15}\n投資有風險，請獨立判斷。"
-    full_msg = header + body + footer
+    full_msg = header + body + f"\n{'='*15}\n投資有風險，請獨立判斷。"
 
     total_sent = 0
     for config in bot_configs:
-        token = config["token"]
-        target_users = list(set(config["users"] + db_users))
-        target_users = [u for u in target_users if u.startswith("U")]
-        for uid in target_users:
-            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
-            try:
-                r = requests.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    json=payload,
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-                else:
-                    print(f"⚠️ [LINE] 基本面報告發送失敗: {r.text}")
-            except Exception as e:
-                print(f"❌ [LINE] 發送異常: {e}")
-
+        total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
     print(f"✅ [LINE] 基本面報告發送完成，共送出 {total_sent} 則訊息。")
 
 
@@ -187,40 +178,18 @@ def send_summary_report(market_name: str, results: list):
             name = s.get("name", s.get("ticker", ""))
             ticker = s.get("ticker", "")
             total = s.get("total_score", 0)
-
             body += f"{star} {i}. {name} ({ticker})  共振:{dim_count}/4  總分:{total}\n"
-
             for dim_label in dim_order:
                 if dim_label in dims:
                     d = dims[dim_label]
-                    reason = d.get("reason", "")[:40]  # 截斷避免訊息過長
-                    body += f"  [{dim_label}] 分:{d.get('score',0)} {reason}\n"
+                    body += f"  [{dim_label}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
             body += "\n"
 
-    footer = f"{'='*15}\n投資有風險，請獨立判斷。"
-    full_msg = header + body + footer
+    full_msg = header + body + f"{'='*15}\n投資有風險，請獨立判斷。"
 
     total_sent = 0
     for config in bot_configs:
-        token = config["token"]
-        target_users = list(set(config["users"] + db_users))
-        target_users = [u for u in target_users if u.startswith("U")]
-        for uid in target_users:
-            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
-            try:
-                r = requests.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    json=payload,
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-                else:
-                    print(f"⚠️ [LINE] 共振報告發送失敗: {r.text}")
-            except Exception as e:
-                print(f"❌ [LINE] 發送異常: {e}")
-
+        total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
     print(f"✅ [LINE] 共振報告發送完成，共送出 {total_sent} 則訊息。")
 
 
@@ -255,40 +224,18 @@ def send_summary_sell_report(market_name: str, results: list):
             name = s.get("name", s.get("ticker", ""))
             ticker = s.get("ticker", "")
             total = s.get("total_score", 0)
-
             body += f"{warn} {i}. {name} ({ticker})  警示:{dim_count}/3  總分:{total}\n"
-
             for dim_label in dim_order:
                 if dim_label in dims:
                     d = dims[dim_label]
-                    reason = d.get("reason", "")[:40]
-                    body += f"  [{dim_label}] 分:{d.get('score',0)} {reason}\n"
+                    body += f"  [{dim_label}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
             body += "\n"
 
-    footer = f"{'='*15}\n⚠️ 請評估是否減碼或出場，投資有風險。"
-    full_msg = header + body + footer
+    full_msg = header + body + f"{'='*15}\n⚠️ 請評估是否減碼或出場，投資有風險。"
 
     total_sent = 0
     for config in bot_configs:
-        token = config["token"]
-        target_users = list(set(config["users"] + db_users))
-        target_users = [u for u in target_users if u.startswith("U")]
-        for uid in target_users:
-            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
-            try:
-                r = requests.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    json=payload,
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-                else:
-                    print(f"⚠️ [LINE] 共振賣出報告發送失敗: {r.text}")
-            except Exception as e:
-                print(f"❌ [LINE] 發送異常: {e}")
-
+        total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
     print(f"✅ [LINE] 共振賣出報告發送完成，共送出 {total_sent} 則訊息。")
 
 
@@ -339,36 +286,15 @@ def send_screener_report(market_name: str, results: list):
             body += f"{emoji} {i}. {name} ({ticker})  總分:{total}  訊號:{sig}\n"
             if providers:
                 body += f"  多方確認: {'+'.join(providers)}\n"
-
             for dk in dim_order:
                 if dk in dims:
                     d = dims[dk]
-                    reason = str(d.get("reason", ""))[:35]
-                    body += f"  [{dim_label.get(dk, dk)}] {d.get('score',0):+d} {reason}\n"
+                    body += f"  [{dim_label.get(dk, dk)}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
             body += "\n"
 
-    footer = f"{'='*15}\n投資有風險，請獨立判斷。"
-    full_msg = header + body + footer
+    full_msg = header + body + f"{'='*15}\n投資有風險，請獨立判斷。"
 
     total_sent = 0
     for config in bot_configs:
-        token = config["token"]
-        target_users = list(set(config["users"] + db_users))
-        target_users = [u for u in target_users if u.startswith("U")]
-        for uid in target_users:
-            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
-            try:
-                r = requests.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    json=payload,
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-                else:
-                    print(f"⚠️ [LINE] 選股報告發送失敗: {r.text}")
-            except Exception as e:
-                print(f"❌ [LINE] 發送異常: {e}")
-
+        total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
     print(f"✅ [LINE] 選股報告發送完成，共送出 {total_sent} 則訊息。")
