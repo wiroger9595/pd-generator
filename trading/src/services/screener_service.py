@@ -7,7 +7,7 @@
 import asyncio
 from src.utils.logger import logger
 from src.services.full_analysis_service import (
-    _score_chip, _score_fundamental, _score_news, _overall_signal
+    _score_chip, _score_fundamental, _score_news, _score_analyst, _overall_signal
 )
 from src.database.db_handler import get_all_eod_chip, get_all_eod_fundamental
 
@@ -246,18 +246,39 @@ async def screen_us_stocks(top_n: int = 5) -> dict:
     if not candidates:
         return {"status": "no_candidates", "market": "US", "results": []}
 
-    logger.info(f"[Screener] 美股技術候選 {len(candidates)} 檔，進行消息分析")
+    logger.info(f"[Screener] 美股技術候選 {len(candidates)} 檔，進行消息+分析師分析")
 
-    # ── Phase 2：Gemini 新聞情緒（並行）────────────────────────────────────
+    # ── Phase 2：Gemini 新聞情緒（並行）+ FMP 分析師評等（executor 並行）──
+    from concurrent.futures import ThreadPoolExecutor
+
     news_tasks = [
         analyze_us_news_sentiment(ticker=c["ticker"], name=c.get("name", ""))
         for c in candidates
     ]
     news_results = await asyncio.gather(*news_tasks, return_exceptions=True)
 
+    # FMP 分析師評等 — 批次同步呼叫（在 executor 避免阻塞事件迴圈）
+    fmp_results: list[dict] = []
+    try:
+        from src.data.fmp_provider import FMPProvider
+        fmp = FMPProvider()
+        if fmp.api_key:
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                fmp_futures = [
+                    loop.run_in_executor(ex, fmp.get_analyst_data, c["ticker"])
+                    for c in candidates
+                ]
+                fmp_results = list(await asyncio.gather(*fmp_futures, return_exceptions=True))
+        else:
+            fmp_results = [{}] * len(candidates)
+    except Exception as e:
+        logger.warning(f"[Screener] FMP batch failed: {e}")
+        fmp_results = [{}] * len(candidates)
+
     # ── 合併 ─────────────────────────────────────────────────────────────
     final = []
-    for c, news_res in zip(candidates, news_results):
+    for c, news_res, fmp_res in zip(candidates, news_results, fmp_results):
         t_score = c.get("score", 0)
         t_reason = c.get("reason", "")
 
@@ -268,17 +289,25 @@ async def screen_us_stocks(top_n: int = 5) -> dict:
             n_score, n_reason = _score_news(news_res)
             n_headlines = news_res.get("headlines", []) if news_res else []
 
-        total = t_score + n_score
+        analyst_data = fmp_res if isinstance(fmp_res, dict) else {}
+        current_price = c.get("price", 0)
+        a_score, a_reason = _score_analyst(analyst_data, current_price)
+
+        total = t_score + n_score + a_score
+        dim: dict = {
+            "technical": {"score": t_score, "reason": t_reason},
+            "news":      {"score": n_score, "reason": n_reason, "headlines": n_headlines},
+        }
+        if analyst_data:
+            dim["analyst"] = {"score": a_score, "reason": a_reason}
+
         final.append({
             "ticker": c["ticker"],
             "name": c.get("name", c["ticker"]),
             "overall_score": total,
             "signal": _overall_signal(total),
             "providers": c.get("providers", []),
-            "dimensions": {
-                "technical": {"score": t_score, "reason": t_reason},
-                "news":      {"score": n_score, "reason": n_reason, "headlines": n_headlines},
-            },
+            "dimensions": dim,
         })
 
     final.sort(key=lambda x: x["overall_score"], reverse=True)

@@ -123,6 +123,62 @@ def _score_news(news: dict) -> tuple[int, str]:
     return scaled, summary or "消息面無明顯情緒"
 
 
+def _score_analyst(analyst: dict, current_price: float = 0) -> tuple[int, str]:
+    """FMP 分析師評等面分數（美股專用）"""
+    if not analyst:
+        return 0, "無分析師數據（請設定 FMP_API_KEY）"
+
+    recs = analyst.get("recommendations", {})
+    strong_buy  = int(recs.get("strong_buy",  0) or 0)
+    buy         = int(recs.get("buy",         0) or 0)
+    hold        = int(recs.get("hold",        0) or 0)
+    sell        = int(recs.get("sell",        0) or 0)
+    strong_sell = int(recs.get("strong_sell", 0) or 0)
+    total = strong_buy + buy + hold + sell + strong_sell
+    if total == 0:
+        return 0, "分析師評等資料不足"
+
+    bullish  = strong_buy + buy
+    bearish  = sell + strong_sell
+    buy_pct  = bullish / total * 100
+
+    score = 0
+    reasons = []
+
+    if buy_pct >= 70:
+        score += 25
+        reasons.append(f"分析師買進 {buy_pct:.0f}% ({bullish}/{total}人)")
+    elif buy_pct >= 50:
+        score += 12
+        reasons.append(f"分析師買進 {buy_pct:.0f}% ({bullish}/{total}人)")
+    elif buy_pct <= 20:
+        score -= 20
+        reasons.append(f"分析師賣出偏多 ({bearish}/{total}人)")
+    elif buy_pct <= 40:
+        score -= 8
+        reasons.append(f"分析師偏空 買進{buy_pct:.0f}%")
+
+    # 目標價上漲空間
+    target = analyst.get("price_target", {})
+    consensus = target.get("target_consensus")
+    if consensus and current_price and current_price > 0:
+        upside = (consensus - current_price) / current_price * 100
+        if upside >= 20:
+            score += 20
+            reasons.append(f"目標價空間 +{upside:.0f}%（共識 ${consensus:.1f}）")
+        elif upside >= 10:
+            score += 10
+            reasons.append(f"目標價空間 +{upside:.0f}%（共識 ${consensus:.1f}）")
+        elif upside >= 0:
+            score += 3
+            reasons.append(f"目標價小幅空間 +{upside:.0f}%")
+        else:
+            score -= 10
+            reasons.append(f"目標價低於現價 {upside:.0f}%（共識 ${consensus:.1f}）")
+
+    return score, " | ".join(reasons) or "分析師評等中性"
+
+
 def _overall_signal(score: int) -> str:
     if score >= 40:
         return "strong_buy"
@@ -214,8 +270,8 @@ async def get_tw_full_analysis(ticker: str, name: str = "") -> dict:
 
 async def get_us_full_analysis(ticker: str, name: str = "") -> dict:
     """
-    美股全方位三維分析
-    （美股無 FinMind EOD 快取，籌碼面改用 Polygon volume ratio）
+    美股全方位四維分析
+    籌碼（Polygon volume）+ 技術（AV）+ 消息（Gemini）+ 分析師評等（FMP）
     """
     from src.services.technical_service import get_technical_indicators
     from src.services.ai_news_service import analyze_us_news_sentiment
@@ -229,13 +285,19 @@ async def get_us_full_analysis(ticker: str, name: str = "") -> dict:
         analyze_us_news_sentiment(ticker=ticker, name=name),
     )
 
-    # ② 籌碼面 — Polygon volume ratio（美股無融資融券，用成交量異常代替）
+    # ② 籌碼面 — Polygon volume ratio
     chip_score, chip_reason = _score_us_volume(ticker)
+
+    # ③ 分析師評等 — FMP（同步呼叫，在 executor 中執行）
+    loop = asyncio.get_event_loop()
+    analyst_data = await loop.run_in_executor(None, _fetch_fmp_analyst, ticker)
+    current_price = tech_result.get("current_price", 0) if tech_result else 0
+    analyst_score, analyst_reason = _score_analyst(analyst_data, current_price)
 
     tech_score, tech_reason = _score_technical(tech_result)
     news_score, news_reason = _score_news(news_result)
 
-    overall = chip_score + tech_score + news_score
+    overall = chip_score + tech_score + news_score + analyst_score
     signal  = _overall_signal(overall)
 
     return {
@@ -263,8 +325,23 @@ async def get_us_full_analysis(ticker: str, name: str = "") -> dict:
                 "key_factors": news_result.get("key_factors", []) if news_result else [],
                 "headlines": news_result.get("headlines", []) if news_result else [],
             },
+            "analyst": {
+                "score": analyst_score,
+                "reason": analyst_reason,
+                "data": analyst_data or None,
+            },
         },
     }
+
+
+def _fetch_fmp_analyst(ticker: str) -> dict:
+    """同步呼叫 FMP，供 run_in_executor 使用"""
+    try:
+        from src.data.fmp_provider import FMPProvider
+        return FMPProvider().get_analyst_data(ticker)
+    except Exception as e:
+        logger.warning(f"[FullAnalysis] FMP analyst fetch failed ({ticker}): {e}")
+        return {}
 
 
 def _score_us_volume(ticker: str) -> tuple[int, str]:

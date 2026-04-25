@@ -36,6 +36,7 @@ from src.controllers import (
     event_router,
     volume_flow_router,
     tick_stream_router,
+    analyst_router,
 )
 
 
@@ -175,6 +176,7 @@ _TAGS = [
     {"name": "EOD",          "description": "🗄️ **EOD 快取** — 盤後批次同步籌碼+基本面到 SQLite"},
     {"name": "Monitor",      "description": "👁️ **盤中監控** — 台股盤中即時異常偵測"},
     {"name": "Trade",        "description": "🤖 **自動交易** — 美股 IB / 台股永豐 / 玉山下單"},
+    {"name": "Analyst",      "description": "🎯 **分析師評等** — FMP Wall Street 買進/持有/賣出票數 + 目標價共識"},
 ]
 
 app = FastAPI(
@@ -216,6 +218,7 @@ app.include_router(technical_router)
 app.include_router(ai_news_router)
 app.include_router(monitor_router)
 app.include_router(tick_stream_router)
+app.include_router(analyst_router)
 
 
 if __name__ == "__main__":
