@@ -263,3 +263,37 @@ async def get_us_summary_sell(min_dimensions: int = 2) -> dict:
         "min_dimensions": min_dimensions,
         "results": alerts,
     }
+
+
+# ─────────────────────────────────────────────
+# 每日統整：買進 + 賣出 同時跑，合成一則 LINE
+# ─────────────────────────────────────────────
+
+async def get_tw_daily_summary(top_n: int = 5, min_dimensions: int = 2) -> dict:
+    """台股每日統整：買進共振 + 賣出警示 同時掃描，回傳合併結果"""
+    logger.info("[Summary] 台股每日統整開始...")
+    buy_result, sell_result = await asyncio.gather(
+        get_tw_summary_buy(top_n=top_n, min_dimensions=min_dimensions),
+        get_tw_summary_sell(min_dimensions=min_dimensions),
+    )
+    return {
+        "status": "success",
+        "market": "TW",
+        "buy": buy_result,
+        "sell": sell_result,
+    }
+
+
+async def get_us_daily_summary(top_n: int = 5, min_dimensions: int = 2) -> dict:
+    """美股每日統整：買進共振 + 賣出警示 同時掃描，回傳合併結果"""
+    logger.info("[Summary] 美股每日統整開始...")
+    buy_result, sell_result = await asyncio.gather(
+        get_us_summary_buy(top_n=top_n, min_dimensions=min_dimensions),
+        get_us_summary_sell(min_dimensions=min_dimensions),
+    )
+    return {
+        "status": "success",
+        "market": "US",
+        "buy": buy_result,
+        "sell": sell_result,
+    }

@@ -2,282 +2,110 @@ name: Trigger Render Server scheduled tasks
 
 on:
   schedule:
-    # /health api
-    - cron: '47 22 * * 1-5'
-    - cron: '17 23 * * 1-5'
-    - cron: '18 7 * * 1-5'
-    - cron: '48 6 * * 1-5'
-    # /api/daily-analysis/sell/us
-    - cron: '30 23 * * 1-5'
-    # /api/daily-analysis/buy/tw
-    - cron: '0 7 * * 1-5'
-    # /api/daily-analysis/buy/us
-    - cron: '0 23 * * 1-5'
-    # /api/daily-analysis/sell/tw
-    - cron: '30 7 * * 1-5'
-    # /api/fundamental/sell/tw  (台灣 16:00)
-    - cron: '0 8 * * 1-5'
-    # /api/fundamental/buy/tw   (台灣 16:30)
-    - cron: '30 8 * * 1-5'
-    # /api/fundamental/sell/us  (台灣 07:45)
-    - cron: '45 23 * * 1-5'
-    # /api/fundamental/buy/us   (台灣 21:00)
-    - cron: '0 13 * * 1-5'
-    # /api/chip/sell/tw  (台灣 17:15)
-    - cron: '15 9 * * 1-5'
-    # /api/chip/buy/tw   (台灣 17:45)
-    - cron: '45 9 * * 1-5'
-    # /api/chip/sell/us  (美東 22:15, 盤後)
-    - cron: '15 22 * * 1-5'
-    # /api/chip/buy/us   (台灣 22:15)
-    - cron: '15 14 * * 1-5'
-    # /api/news/sell/tw  (台灣 18:15)
-    - cron: '15 10 * * 1-5'
-    # /api/news/buy/tw   (台灣 18:45)
-    - cron: '45 10 * * 1-5'
-    # /api/news/sell/us  (美東 22:30, 盤後)
-    - cron: '30 22 * * 1-5'
-    # /api/news/buy/us   (台灣 22:30)
-    - cron: '30 14 * * 1-5'
-    # /api/summary/buy/tw  (台灣 19:00，四維掃描全部完成後)
+    # ── 保持 Render 活躍（避免 free plan 休眠）────────────────────────────
+    - cron: '0 6 * * 1-5'    # UTC 06:00（台灣 14:00，台股盤中）
+    - cron: '0 13 * * 1-5'   # UTC 13:00（美東 09:00，美股開盤前）
+
+    # ── 台股每日統整（台灣 19:00 = UTC 11:00）──────────────────────────────
     - cron: '0 11 * * 1-5'
-    # /api/summary/buy/us  (美東 00:00，盤後四維彙整)
-    - cron: '0 16 * * 1-5'
-    # /api/summary/sell/tw  (台灣 19:30，三維賣出警示)
-    - cron: '30 11 * * 1-5'
-    # /api/summary/sell/us  (美東 00:30，三維賣出警示)
+
+    # ── 美股每日統整（台灣 00:30 = UTC 16:30）──────────────────────────────
     - cron: '30 16 * * 1-5'
-    # /api/eod/sync/tw  (台灣 20:00，盤後 EOD 批次同步)
+
+    # ── EOD 快取同步（台灣 20:00 = UTC 12:00）──────────────────────────────
     - cron: '0 12 * * 1-5'
-    # /api/screener/tw  (台灣 20:30，EOD 同步完成後選股)
+
+    # ── 台股選股（台灣 20:30 = UTC 12:30，依賴 EOD sync）──────────────────
     - cron: '30 12 * * 1-5'
-    # /api/screener/us  (美東 22:00，盤後美股選股)
+
+    # ── 美股選股（台灣 22:00 = UTC 14:00）──────────────────────────────────
     - cron: '0 14 * * 2-6'
-  workflow_dispatch: # 允許手動觸發測試
+
+  workflow_dispatch:  # 允許手動觸發測試
+
 
 jobs:
-  trigger-health:
+  # ── 保持 Render 活躍 ────────────────────────────────────────────────────────
+  wake-up:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '47 22 * * 1-5' || github.event.schedule == '17 23 * * 1-5' || github.event.schedule == '18 7 * * 1-5' || github.event.schedule == '48 6 * * 1-5' || github.event_name == 'workflow_dispatch'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 6 * * 1-5' ||
+      github.event.schedule == '0 13 * * 1-5'
     steps:
-      - name: Call /health API
+      - name: Ping health endpoint
         run: |
-          curl -sSf "https://pd-generator-2uwi.onrender.com/health"
-          echo "Called /health API successfully"
+          curl --connect-timeout 60 --max-time 120 --retry 3 \
+            -sSf "https://pd-generator-2uwi.onrender.com/health"
+          echo "Server alive at $(date -u)"
 
-  trigger-sell-us:
+  # ── 台股每日統整（買進共振 + 賣出警示 → 一則 LINE）────────────────────────
+  tw-daily-summary:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '30 23 * * 1-5' || github.event_name == 'workflow_dispatch'
+    if: >
+      github.event.schedule == '0 11 * * 1-5' ||
+      github.event_name == 'workflow_dispatch'
     steps:
-      - name: Call /api/daily-analysis/sell/us API
+      - name: POST /api/summary/daily/tw
         run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/us"
-          echo "Called /api/daily-analysis/sell/us API successfully"
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/tw"
+          echo "TW daily summary triggered at $(date -u)"
 
-  trigger-buy-tw:
+  # ── 美股每日統整（買進共振 + 賣出警示 → 一則 LINE）────────────────────────
+  us-daily-summary:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '0 7 * * 1-5' || github.event_name == 'workflow_dispatch'
+    if: >
+      github.event.schedule == '30 16 * * 1-5' ||
+      github.event_name == 'workflow_dispatch'
     steps:
-      - name: Call /api/daily-analysis/buy/tw API
+      - name: POST /api/summary/daily/us
         run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/buy/tw"
-          echo "Called /api/daily-analysis/buy/tw API successfully"
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us"
+          echo "US daily summary triggered at $(date -u)"
 
-  trigger-buy-us:
+  # ── EOD 快取同步（台股籌碼+基本面，不發 LINE）────────────────────────────
+  eod-sync-tw:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '0 23 * * 1-5' || github.event_name == 'workflow_dispatch'
+    if: >
+      github.event.schedule == '0 12 * * 1-5' ||
+      github.event_name == 'workflow_dispatch'
     steps:
-      - name: Call /api/daily-analysis/buy/us API
+      - name: POST /api/eod/sync/tw
         run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/buy/us"
-          echo "Called /api/daily-analysis/buy/us API successfully"
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/eod/sync/tw" || true
+          echo "EOD sync triggered at $(date -u)"
 
-  trigger-sell-tw:
+  # ── 台股選股（不發 LINE，Swagger 可查）──────────────────────────────────
+  screener-tw:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '30 7 * * 1-5' || github.event_name == 'workflow_dispatch'
+    needs: eod-sync-tw
+    if: >
+      github.event.schedule == '30 12 * * 1-5' ||
+      github.event_name == 'workflow_dispatch'
     steps:
-      - name: Call /api/daily-analysis/sell/tw API
+      - name: POST /api/screener/tw
         run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/tw"
-          echo "Called /api/daily-analysis/sell/tw API successfully"
-  
-  trigger-fundamental-sell-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 8 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/fundamental/sell/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/sell/tw"
-          echo "Called /api/fundamental/sell/tw API successfully"
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/screener/tw" || true
+          echo "TW screener triggered at $(date -u)"
 
-  trigger-fundamental-buy-tw:
+  # ── 美股選股（不發 LINE，Swagger 可查）──────────────────────────────────
+  screener-us:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '30 8 * * 1-5' || github.event_name == 'workflow_dispatch'
+    if: >
+      github.event.schedule == '0 14 * * 2-6' ||
+      github.event_name == 'workflow_dispatch'
     steps:
-      - name: Call /api/fundamental/buy/tw API
+      - name: POST /api/screener/us
         run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/buy/tw"
-          echo "Called /api/fundamental/buy/tw API successfully"
-
-  trigger-fundamental-sell-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '45 23 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/fundamental/sell/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/sell/us"
-          echo "Called /api/fundamental/sell/us API successfully"
-
-  trigger-fundamental-buy-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 13 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/fundamental/buy/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/fundamental/buy/us"
-          echo "Called /api/fundamental/buy/us API successfully"
-
-  trigger-chip-sell-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '15 9 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/chip/sell/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/sell/tw"
-          echo "Called /api/chip/sell/tw API successfully"
-
-  trigger-chip-buy-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '45 9 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/chip/buy/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/buy/tw"
-          echo "Called /api/chip/buy/tw API successfully"
-
-  trigger-chip-sell-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '15 22 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/chip/sell/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/sell/us"
-          echo "Called /api/chip/sell/us API successfully"
-
-  trigger-chip-buy-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '15 14 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/chip/buy/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/chip/buy/us"
-          echo "Called /api/chip/buy/us API successfully"
-
-  trigger-news-sell-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '15 10 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/news/sell/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/sell/tw"
-          echo "Called /api/news/sell/tw API successfully"
-
-  trigger-news-buy-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '45 10 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/news/buy/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/buy/tw"
-          echo "Called /api/news/buy/tw API successfully"
-
-  trigger-news-sell-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '30 22 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/news/sell/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/sell/us"
-          echo "Called /api/news/sell/us API successfully"
-
-  trigger-news-buy-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '30 14 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/news/buy/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/news/buy/us"
-          echo "Called /api/news/buy/us API successfully"
-
-  trigger-summary-buy-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 11 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/summary/buy/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/buy/tw"
-          echo "Called /api/summary/buy/tw API successfully"
-
-  trigger-summary-buy-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 16 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/summary/buy/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/buy/us"
-          echo "Called /api/summary/buy/us API successfully"
-
-  trigger-summary-sell-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '30 11 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/summary/sell/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/sell/tw"
-          echo "Called /api/summary/sell/tw API successfully"
-
-  trigger-summary-sell-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '30 16 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/summary/sell/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/summary/sell/us"
-          echo "Called /api/summary/sell/us API successfully"
-
-  trigger-eod-sync-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 12 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/eod/sync/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/eod/sync/tw"
-          echo "Called /api/eod/sync/tw API successfully"
-
-  trigger-screener-tw:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '30 12 * * 1-5' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/screener/tw API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/screener/tw"
-          echo "Called /api/screener/tw API successfully"
-
-  trigger-screener-us:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 14 * * 2-6' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Call /api/screener/us API
-        run: |
-          curl -X POST -sSf "https://pd-generator-2uwi.onrender.com/api/screener/us"
-          echo "Called /api/screener/us API successfully"
-
-  wake_up:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send Request (Like Postman)
-        run: |
-          curl --connect-timeout 60 \
-               --max-time 120 \
-               --retry 3 \
-               -i https://pd-generator-2uwi.onrender.com
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/screener/us" || true
+          echo "US screener triggered at $(date -u)"

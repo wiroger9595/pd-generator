@@ -298,3 +298,66 @@ def send_screener_report(market_name: str, results: list):
     for config in bot_configs:
         total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
     print(f"✅ [LINE] 選股報告發送完成，共送出 {total_sent} 則訊息。")
+
+
+def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
+    """
+    每日統整報告：買進共振 + 賣出警示 合成一則 LINE 訊息。
+    buy_results:  summary_service 買進格式 (dimensions 含技術/籌碼/基本/消息)
+    sell_results: summary_service 賣出格式 (dimensions 含籌碼/基本/消息)
+    """
+    bot_configs = get_line_bot_configs()
+    db_users = get_all_users()
+    if not bot_configs and not db_users:
+        print("⚠️ [LINE] 未設定任何 Token 或 User ID，跳過通知")
+        return
+
+    dim_order_buy  = ["技術面", "籌碼面", "基本面", "消息面"]
+    dim_order_sell = ["籌碼面", "基本面", "消息面"]
+    buy_stars  = {4: "★★★★", 3: "★★★", 2: "★★", 1: "★"}
+    sell_stars = {3: "🔴🔴🔴", 2: "🔴🔴", 1: "🔴"}
+
+    header = (
+        f"【📊 {market_name} 盤後統整報告】\n"
+        f"日期: {time.strftime('%Y-%m-%d')}\n"
+        f"{'='*15}\n\n"
+    )
+
+    # ── 買進共振 ──────────────────────────────────────────────────────────
+    if buy_results:
+        body = "🔥 【多維共振買進】\n"
+        for i, s in enumerate(buy_results, 1):
+            dims = s.get("dimensions", {})
+            dc = len(dims)
+            star = buy_stars.get(dc, "★")
+            body += f"{star} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  共振:{dc}/4  總分:{s.get('total_score',0)}\n"
+            for lbl in dim_order_buy:
+                if lbl in dims:
+                    d = dims[lbl]
+                    body += f"  [{lbl}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
+        body += "\n"
+    else:
+        body = "🔥 【多維共振買進】\n今日無共振訊號。\n\n"
+
+    # ── 賣出警示 ──────────────────────────────────────────────────────────
+    if sell_results:
+        body += "⚠️ 【庫存賣出警示】\n"
+        for i, s in enumerate(sell_results, 1):
+            dims = s.get("dimensions", {})
+            dc = len(dims)
+            warn = sell_stars.get(dc, "🔴")
+            body += f"{warn} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  警示:{dc}/3  總分:{s.get('total_score',0)}\n"
+            for lbl in dim_order_sell:
+                if lbl in dims:
+                    d = dims[lbl]
+                    body += f"  [{lbl}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
+        body += "\n"
+    else:
+        body += "⚠️ 【庫存賣出警示】\n今日無警示。\n\n"
+
+    full_msg = header + body + f"{'='*15}\n投資有風險，請獨立判斷。"
+
+    total_sent = 0
+    for config in bot_configs:
+        total_sent += _multicast(config["token"], _collect_users(config, db_users), full_msg)
+    print(f"✅ [LINE] 每日統整報告發送完成，共送出 {total_sent} 則訊息。")
