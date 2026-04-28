@@ -8,6 +8,7 @@ import time
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.utils.logger import logger
+from src.utils.notifier import send_signal_report
 
 router = APIRouter(prefix="/api", tags=["Analysis"])
 
@@ -65,6 +66,7 @@ async def daily_analysis_buy_us(
             "buy_points": {"score": r["score"], "reason": reason},
         })
 
+    send_signal_report("美股", "技術面", "buy", buy_list)
     logger.info(f"[DailyUS] 完成，推薦 {len(buy_list)} 檔")
     return {"status": "success", "recommendations": buy_list}
 
@@ -84,6 +86,7 @@ async def daily_analysis_buy_tw(
         "price": r["price"],
         "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")},
     } for r in recs]
+    send_signal_report("台股", "技術面", "buy", buy_list)
     logger.info(f"[DailyTW] 完成，推薦 {len(buy_list)} 檔")
     return {"status": "success", "recommendations": buy_list}
 
@@ -92,6 +95,7 @@ async def daily_analysis_buy_tw(
 async def daily_analysis_sell_us():
     from src.services.recommendation_service import get_sell_recommendations
     result = await get_sell_recommendations("us")
+    send_signal_report("美股", "技術面", "sell", result.get("sell_signals", []))
     return {"status": "success", "result": result}
 
 
@@ -99,6 +103,7 @@ async def daily_analysis_sell_us():
 async def daily_analysis_sell_tw():
     from src.services.recommendation_service import get_sell_recommendations
     result = await get_sell_recommendations("tw")
+    send_signal_report("台股", "技術面", "sell", result.get("sell_signals", []))
     return {"status": "success", "result": result}
 
 

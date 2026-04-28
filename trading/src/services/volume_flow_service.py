@@ -138,10 +138,8 @@ def _build_alerts(tickers: list[str], results: list[dict]) -> list[dict]:
 
 
 def _send_volume_alerts(market_name: str, alerts: list[dict]):
-    """發送買賣量異常 LINE 推播"""
-    import requests as req
-    from src.utils.notifier import get_line_bot_configs
-    from src.database.db_handler import get_all_users
+    """發送買賣量異常警報（Telegram only，盤中即時）"""
+    from src.utils.notifier import _broadcast
 
     header = (
         f"【💹 {market_name} 量流異常警報】\n"
@@ -170,26 +168,5 @@ def _send_volume_alerts(market_name: str, alerts: list[dict]):
         )
 
     footer = f"{'='*15}\n量流分析僅供參考，投資需自行判斷。"
-    full_msg = header + body + footer
-
-    configs = get_line_bot_configs()
-    db_users = get_all_users()
-    total_sent = 0
-    for config in configs:
-        token = config["token"]
-        targets = list(set(config["users"] + db_users))
-        targets = [u for u in targets if u.startswith("U")]
-        for uid in targets:
-            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
-            try:
-                r = req.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    json=payload, timeout=10,
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-            except Exception as e:
-                logger.error(f"[VolumeFlow] LINE 發送失敗: {e}")
-
-    logger.info(f"[VolumeFlow] 量流警報發送 {total_sent} 則，{len(alerts)} 個異常")
+    _broadcast(header + body + footer, f"{market_name} 量流警報", channels={"telegram"})
+    logger.info(f"[VolumeFlow] 量流警報發送，{len(alerts)} 個異常")

@@ -234,15 +234,13 @@ async def _process_events(events: list[dict], priority_tickers: list[str]) -> li
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LINE 通知
+# 通知
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _send_event_alerts(market_name: str, alerts: list[dict]):
-    """發送重大事件 LINE 警報"""
-    import requests as req
-    import json, time
-    from src.utils.notifier import get_line_bot_configs
-    from src.database.db_handler import get_all_users
+    """發送重大事件警報（Telegram only，盤中即時）"""
+    import time
+    from src.utils.notifier import _broadcast
 
     score_emoji = {10: "🔥🔥🔥", 9: "🔥🔥", 8: "🔥", 7: "⚠️⚠️", 6: "⚠️", 5: "📌"}
 
@@ -262,26 +260,5 @@ def _send_event_alerts(market_name: str, alerts: list[dict]):
         )
 
     footer = f"{'='*15}\n投資有風險，事件仍需自行判斷。"
-    full_msg = header + body + footer
-
-    configs = get_line_bot_configs()
-    db_users = get_all_users()
-    total_sent = 0
-    for config in configs:
-        token = config["token"]
-        targets = list(set(config["users"] + db_users))
-        targets = [u for u in targets if u.startswith("U")]
-        for uid in targets:
-            payload = {"to": uid, "messages": [{"type": "text", "text": full_msg}]}
-            try:
-                r = req.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                    json=payload, timeout=10,
-                )
-                if r.status_code == 200:
-                    total_sent += 1
-            except Exception as e:
-                logger.error(f"[EventMonitor] LINE 發送失敗: {e}")
-
-    logger.info(f"[EventMonitor] 事件警報已發送 {total_sent} 則，共 {len(alerts)} 個事件")
+    _broadcast(header + body + footer, f"{market_name} 事件警報", channels={"telegram"})
+    logger.info(f"[EventMonitor] 事件警報已發送，共 {len(alerts)} 個事件")

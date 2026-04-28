@@ -123,6 +123,34 @@ def _broadcast(text: str, label: str = "訊息", channels: set = _ALL_CHANNELS) 
         print(f"✅ [Notify] {label} 已發送 → {' + '.join(parts)}")
 
 
+# ── 通用維度報告（Telegram only）──────────────────────────────────────────────
+
+def send_signal_report(market_name: str, dimension: str, signal_type: str, items: list) -> None:
+    """籌碼/技術/消息/基本面 任意維度的買進/賣出訊號，Telegram only"""
+    emoji = "📈" if signal_type == "buy" else "📉"
+    label = "買進" if signal_type == "buy" else "賣出"
+    header = (
+        f"【{emoji} {market_name} {dimension}{label}訊號】\n"
+        f"日期: {time.strftime('%Y-%m-%d')}\n"
+        f"{'='*15}\n\n"
+    )
+    if not items:
+        body = f"今日無{dimension}{label}訊號。\n"
+    else:
+        body = ""
+        for s in items:
+            score = s.get("score") or s.get("buy_points", {}).get("score", 0)
+            reason = (s.get("reason") or s.get("buy_points", {}).get("reason", "")
+                      or s.get("sell_reason", "") or "—")
+            name = s.get("name") or s.get("ticker", "")
+            body += f"• {name} ({s.get('ticker', '')})\n  評分: {score} | {str(reason)[:60]}\n"
+    _broadcast(
+        header + body + f"\n{'='*15}\n投資有風險，請獨立判斷。",
+        f"{market_name} {dimension}{label}",
+        channels={"telegram"},
+    )
+
+
 # ── 格式化工具 ────────────────────────────────────────────────────────────────
 
 def format_stock_info(s):

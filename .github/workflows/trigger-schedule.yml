@@ -2,26 +2,48 @@ name: Trigger Render Server scheduled tasks
 
 on:
   schedule:
-    # ── 保持 Render 活躍（避免 free plan 休眠）────────────────────────────
-    - cron: '0 6 * * 1-5'    # UTC 06:00（台灣 14:00，台股盤中）
-    - cron: '0 13 * * 1-5'   # UTC 13:00（美東 09:00，美股開盤前）
+    # ── 保持 Render 活躍 ─────────────────────────────────────────────────────
+    - cron: '0 6 * * 1-5'    # UTC 06:00（台灣 14:00，台股剛收盤）
+    - cron: '0 13 * * 1-5'   # UTC 13:00（台灣 21:00，美股盤中）
 
-    # ── 台股每日統整（台灣 19:00 = UTC 11:00）──────────────────────────────
-    - cron: '0 11 * * 1-5'
+    # ── 台股盤中事件 + 量流（UTC 01-05 = 台灣 09:00-13:00）────────────────────
+    - cron: '0 1 * * 1-5'
+    - cron: '0 2 * * 1-5'
+    - cron: '0 3 * * 1-5'
+    - cron: '0 4 * * 1-5'
+    - cron: '0 5 * * 1-5'
 
-    # ── 美股每日統整（台灣 00:30 = UTC 16:30）──────────────────────────────
-    - cron: '30 16 * * 1-5'
+    # ── 台股收盤後分析（UTC 06:30-10:45 = 台灣 14:30-18:45）─────────────────
+    - cron: '30 6 * * 1-5'   # chip-tw    (台灣 14:30)
+    - cron: '0 7 * * 1-5'    # technical-tw (台灣 15:00)
+    - cron: '30 10 * * 1-5'  # fundamental-tw (台灣 18:30)
+    - cron: '45 10 * * 1-5'  # news-tw    (台灣 18:45)
 
-    # ── EOD 快取同步（台灣 20:00 = UTC 12:00）──────────────────────────────
-    - cron: '0 12 * * 1-5'
+    # ── 台股每日統整 + EOD + 選股（台灣 19:00-20:30）─────────────────────────
+    - cron: '0 11 * * 1-5'   # tw-daily-summary
+    - cron: '0 12 * * 1-5'   # eod-sync-tw
+    - cron: '30 12 * * 1-5'  # screener-tw（需要 eod-sync-tw）
 
-    # ── 台股選股（台灣 20:30 = UTC 12:30，依賴 EOD sync）──────────────────
-    - cron: '30 12 * * 1-5'
+    # ── 美股盤中事件 + 量流（UTC 14:30-20:00 = 美東 10:30-16:00）─────────────
+    - cron: '30 14 * * 2-6'
+    - cron: '30 15 * * 2-6'
+    - cron: '30 17 * * 2-6'
+    - cron: '30 18 * * 2-6'
+    - cron: '30 19 * * 2-6'
 
-    # ── 美股選股（台灣 22:00 = UTC 14:00）──────────────────────────────────
-    - cron: '0 14 * * 2-6'
+    # ── 美股選股（美東開盤前）────────────────────────────────────────────────
+    - cron: '0 14 * * 2-6'   # screener-us (台灣 22:00)
 
-  workflow_dispatch:  # 允許手動觸發測試
+    # ── 美股每日統整（UTC 16:30 = 台灣 00:30+1）──────────────────────────────
+    - cron: '30 16 * * 1-5'  # us-daily-summary
+
+    # ── 美股收盤後分析（UTC 21:00-22:00 = 美東 17:00-18:00）──────────────────
+    - cron: '0 21 * * 2-6'   # chip-us
+    - cron: '30 21 * * 2-6'  # fundamental-us
+    - cron: '45 21 * * 2-6'  # news-us
+    - cron: '0 22 * * 2-6'   # technical-us
+
+  workflow_dispatch:
 
 
 jobs:
@@ -39,7 +61,100 @@ jobs:
             -sSf "https://pd-generator-2uwi.onrender.com/health"
           echo "Server alive at $(date -u)"
 
-  # ── 台股每日統整（買進共振 + 賣出警示 → 一則 LINE）────────────────────────
+  # ── 台股盤中：事件監控（每小時，TW 09-13）──────────────────────────────────
+  events-check-tw:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 1 * * 1-5' ||
+      github.event.schedule == '0 2 * * 1-5' ||
+      github.event.schedule == '0 3 * * 1-5' ||
+      github.event.schedule == '0 4 * * 1-5' ||
+      github.event.schedule == '0 5 * * 1-5'
+    steps:
+      - name: POST /api/events/check/tw
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 120 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/events/check/tw" || true
+          echo "TW events checked at $(date -u)"
+
+  # ── 台股盤中：量流掃描（每 2 小時，TW 10:00 + 12:00）──────────────────────
+  volume-flow-tw:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 2 * * 1-5' ||
+      github.event.schedule == '0 4 * * 1-5'
+    steps:
+      - name: POST /api/volume-flow/scan/tw
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 120 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/volume-flow/scan/tw" || true
+          echo "TW volume-flow scanned at $(date -u)"
+
+  # ── 台股收盤後：籌碼面（TW 14:30）──────────────────────────────────────────
+  chip-tw:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '30 6 * * 1-5'
+    steps:
+      - name: POST /api/chip/buy/tw + sell/tw
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/chip/buy/tw" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/chip/sell/tw" || true
+          echo "TW chip done at $(date -u)"
+
+  # ── 台股收盤後：技術面（TW 15:00）──────────────────────────────────────────
+  technical-tw:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 7 * * 1-5'
+    steps:
+      - name: POST /api/daily-analysis/buy/tw + sell/tw
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/buy/tw" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/tw" || true
+          echo "TW technical done at $(date -u)"
+
+  # ── 台股收盤後：基本面（TW 18:30）──────────────────────────────────────────
+  fundamental-tw:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '30 10 * * 1-5'
+    steps:
+      - name: POST /api/fundamental/buy/tw + sell/tw
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/fundamental/buy/tw" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/fundamental/sell/tw" || true
+          echo "TW fundamental done at $(date -u)"
+
+  # ── 台股收盤後：消息面（TW 18:45）──────────────────────────────────────────
+  news-tw:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '45 10 * * 1-5'
+    steps:
+      - name: POST /api/news/buy/tw + sell/tw
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/news/buy/tw" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/news/sell/tw" || true
+          echo "TW news done at $(date -u)"
+
+  # ── 台股每日統整（買進共振 + 賣出警示 → 一則 LINE + Telegram）─────────────
   tw-daily-summary:
     runs-on: ubuntu-latest
     if: >
@@ -53,21 +168,7 @@ jobs:
             -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/tw"
           echo "TW daily summary triggered at $(date -u)"
 
-  # ── 美股每日統整（買進共振 + 賣出警示 → 一則 LINE）────────────────────────
-  us-daily-summary:
-    runs-on: ubuntu-latest
-    if: >
-      github.event.schedule == '30 16 * * 1-5' ||
-      github.event_name == 'workflow_dispatch'
-    steps:
-      - name: POST /api/summary/daily/us
-        run: |
-          curl -X POST \
-            --connect-timeout 30 --max-time 300 --retry 2 \
-            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us"
-          echo "US daily summary triggered at $(date -u)"
-
-  # ── EOD 快取同步（台股籌碼+基本面，不發 LINE）────────────────────────────
+  # ── EOD 快取同步（台股籌碼+基本面）──────────────────────────────────────────
   eod-sync-tw:
     runs-on: ubuntu-latest
     if: >
@@ -81,7 +182,7 @@ jobs:
             -sf "https://pd-generator-2uwi.onrender.com/api/eod/sync/tw" || true
           echo "EOD sync triggered at $(date -u)"
 
-  # ── 台股選股（不發 LINE，Swagger 可查）──────────────────────────────────
+  # ── 台股選股（需 EOD 快取）────────────────────────────────────────────────
   screener-tw:
     runs-on: ubuntu-latest
     needs: eod-sync-tw
@@ -96,7 +197,40 @@ jobs:
             -sf "https://pd-generator-2uwi.onrender.com/api/screener/tw" || true
           echo "TW screener triggered at $(date -u)"
 
-  # ── 美股選股（不發 LINE，Swagger 可查）──────────────────────────────────
+  # ── 美股盤中：事件監控（TW 22:30-03:30+1，每小時）─────────────────────────
+  events-check-us:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '30 14 * * 2-6' ||
+      github.event.schedule == '30 15 * * 2-6' ||
+      github.event.schedule == '30 17 * * 2-6' ||
+      github.event.schedule == '30 18 * * 2-6' ||
+      github.event.schedule == '30 19 * * 2-6'
+    steps:
+      - name: POST /api/events/check/us
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 120 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/events/check/us" || true
+          echo "US events checked at $(date -u)"
+
+  # ── 美股盤中：量流掃描（TW 23:30 + 02:30+1）──────────────────────────────
+  volume-flow-us:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '30 15 * * 2-6' ||
+      github.event.schedule == '30 18 * * 2-6'
+    steps:
+      - name: POST /api/volume-flow/scan/us
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 120 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/volume-flow/scan/us" || true
+          echo "US volume-flow scanned at $(date -u)"
+
+  # ── 美股選股（開盤前，TW 22:00）──────────────────────────────────────────
   screener-us:
     runs-on: ubuntu-latest
     if: >
@@ -109,3 +243,77 @@ jobs:
             --connect-timeout 30 --max-time 300 --retry 2 \
             -sf "https://pd-generator-2uwi.onrender.com/api/screener/us" || true
           echo "US screener triggered at $(date -u)"
+
+  # ── 美股每日統整（買進共振 + 賣出警示 → 一則 LINE + Telegram）─────────────
+  us-daily-summary:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.schedule == '30 16 * * 1-5' ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - name: POST /api/summary/daily/us
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us"
+          echo "US daily summary triggered at $(date -u)"
+
+  # ── 美股收盤後：籌碼面（美東 17:00）──────────────────────────────────────
+  chip-us:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 21 * * 2-6'
+    steps:
+      - name: POST /api/chip/buy/us + sell/us
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/chip/buy/us" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/chip/sell/us" || true
+          echo "US chip done at $(date -u)"
+
+  # ── 美股收盤後：基本面（美東 17:30）──────────────────────────────────────
+  fundamental-us:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '30 21 * * 2-6'
+    steps:
+      - name: POST /api/fundamental/buy/us + sell/us
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/fundamental/buy/us" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/fundamental/sell/us" || true
+          echo "US fundamental done at $(date -u)"
+
+  # ── 美股收盤後：消息面（美東 17:45）──────────────────────────────────────
+  news-us:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '45 21 * * 2-6'
+    steps:
+      - name: POST /api/news/buy/us + sell/us
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/news/buy/us" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/news/sell/us" || true
+          echo "US news done at $(date -u)"
+
+  # ── 美股收盤後：技術面（美東 18:00）──────────────────────────────────────
+  technical-us:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 22 * * 2-6'
+    steps:
+      - name: POST /api/daily-analysis/buy/us + sell/us
+        run: |
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/buy/us" || true
+          curl -X POST --connect-timeout 30 --max-time 180 --retry 1 \
+            -sf "https://pd-generator-2uwi.onrender.com/api/daily-analysis/sell/us" || true
+          echo "US technical done at $(date -u)"
