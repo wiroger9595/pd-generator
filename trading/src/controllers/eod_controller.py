@@ -2,8 +2,10 @@
 EOD (End-of-Day) 批次同步 Controller  —  /api/eod/*
 每天晚上用 FinMind 批次抓取台股籌碼面 + 基本面，存入本地 SQLite 快取
 """
+import time
 from fastapi import APIRouter, Query
 from src.utils.logger import logger
+from src.utils.notifier import _broadcast
 
 router = APIRouter(prefix="/api/eod", tags=["EOD"])
 
@@ -24,6 +26,15 @@ async def eod_sync_tw(
     logger.info(
         f"[EOD] 同步完成 date={result['date']} "
         f"chip={result['chip_count']} fund={result['fundamental_count']}"
+    )
+    _broadcast(
+        f"【✅ 台股 EOD 快取同步完成】\n"
+        f"日期: {result['date']}\n"
+        f"籌碼面: {result['chip_count']} 筆\n"
+        f"基本面: {result['fundamental_count']} 筆\n"
+        f"完成時間: {time.strftime('%H:%M:%S')}",
+        label="EOD 同步",
+        channels={"telegram"},
     )
     return result
 

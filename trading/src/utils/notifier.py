@@ -94,20 +94,26 @@ def _telegram_send(bot_token: str, chat_ids: list[str], text: str) -> int:
 
 # ── 統一廣播（LINE + Telegram 同時發）────────────────────────────────────────
 
-def _broadcast(text: str, label: str = "訊息") -> None:
-    """同時發送至 LINE 和 Telegram，有哪個用哪個。"""
+_ALL_CHANNELS = {"line", "telegram"}
+
+
+def _broadcast(text: str, label: str = "訊息", channels: set = _ALL_CHANNELS) -> None:
+    """發送通知，channels 控制哪些管道：{"line"}, {"telegram"}, 或兩者。"""
     db_users = get_all_users()
     line_configs = get_line_bot_configs()
     tg_token, tg_chats = get_telegram_config()
 
     line_sent = 0
-    for config in line_configs:
-        line_sent += _multicast(config["token"], _collect_users(config, db_users), text)
+    if "line" in channels:
+        for config in line_configs:
+            line_sent += _multicast(config["token"], _collect_users(config, db_users), text)
 
-    tg_sent = _telegram_send(tg_token, tg_chats, text)
+    tg_sent = 0
+    if "telegram" in channels:
+        tg_sent = _telegram_send(tg_token, tg_chats, text)
 
     if line_sent == 0 and tg_sent == 0:
-        print(f"⚠️ [Notify] {label}：LINE 和 Telegram 皆未設定或發送失敗")
+        print(f"⚠️ [Notify] {label}：{'LINE 和 Telegram 皆未設定或發送失敗' if channels == _ALL_CHANNELS else '目標管道未設定或發送失敗'}")
     else:
         parts = []
         if line_sent:
@@ -149,7 +155,7 @@ def send_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[]
         body += "\n"
     if not body:
         body = "今日無特別買賣訊號。\n"
-    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 綜合報告")
+    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 綜合報告", channels={"telegram"})
 
 
 def send_line_report(market_name, stocks):
@@ -171,7 +177,7 @@ def send_fundamental_report(market_name: str, signal_type: str, items: list):
             f"• {s.get('name', '')} ({s.get('ticker', '')})\n  評分: {s.get('score', 0)} | {s.get('reason', '')}\n"
             for s in items
         )
-    _broadcast(header + body + f"\n{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 基本面{label}")
+    _broadcast(header + body + f"\n{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 基本面{label}", channels={"telegram"})
 
 
 def send_summary_report(market_name: str, results: list):
@@ -195,7 +201,7 @@ def send_summary_report(market_name: str, results: list):
                     d = dims[lbl]
                     body += f"  [{lbl}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
             body += "\n"
-    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 共振買進")
+    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 共振買進", channels={"telegram"})
 
 
 def send_summary_sell_report(market_name: str, results: list):
@@ -219,7 +225,7 @@ def send_summary_sell_report(market_name: str, results: list):
                     d = dims[lbl]
                     body += f"  [{lbl}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
             body += "\n"
-    _broadcast(header + body + f"{'='*15}\n⚠️ 請評估是否減碼或出場，投資有風險。", f"{market_name} 賣出警示")
+    _broadcast(header + body + f"{'='*15}\n⚠️ 請評估是否減碼或出場，投資有風險。", f"{market_name} 賣出警示", channels={"telegram"})
 
 
 def send_screener_report(market_name: str, results: list):
@@ -254,7 +260,7 @@ def send_screener_report(market_name: str, results: list):
                     d = dims[dk]
                     body += f"  [{dim_label.get(dk, dk)}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
             body += "\n"
-    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 選股報告")
+    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 選股報告", channels={"telegram"})
 
 
 def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
