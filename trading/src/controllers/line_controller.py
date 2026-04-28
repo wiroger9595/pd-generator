@@ -17,47 +17,72 @@ from src.utils.logger import logger
 router = APIRouter(tags=["LINE"])
 
 
-@router.post("/api/line/test", summary="LINE 推播診斷 — 傳送測試訊息並顯示 API 回應")
+@router.post("/api/line/test", summary="通知診斷 — LINE + Telegram 同時測試")
 async def line_test():
     """
-    對所有設定的 Bot + User 發送一則測試訊息，並回傳每筆 LINE API 的 HTTP 狀態碼與回應內容。
-    用途：在 Swagger 確認 Token / User ID / 配額是否正常。
+    同時測試 LINE multicast 和 Telegram sendMessage，回傳各自的 HTTP 狀態與回應。
+    用途：在 Swagger 一鍵確認兩個通知管道是否正常。
     """
-    import time
+    import time, os
+    from src.utils.notifier import get_telegram_config
+
+    msg = f"[Trading System 診斷] 通知測試 {time.strftime('%Y-%m-%d %H:%M:%S')} ✅"
+    results: dict = {"line": [], "telegram": []}
+
+    # ── LINE ──────────────────────────────────────────────────────────────
     configs = get_line_bot_configs()
     if not configs:
-        return {"error": "未找到任何 LINE Bot 設定 (LINE_BOT_1_TOKEN 或 LINE_CHANNEL_ACCESS_TOKEN)"}
-
-    results = []
-    msg = f"[Trading System 診斷] LINE 連線測試 {time.strftime('%Y-%m-%d %H:%M:%S')} — 如收到此訊息表示推播正常 ✅"
-
-    for i, cfg in enumerate(configs):
-        token = cfg["token"]
-        users = cfg["users"]
-        if not users:
-            results.append({"bot_index": i + 1, "token_prefix": token[:12] + "...", "error": "users 清單為空，請設定 LINE_USER_ID 或 LINE_BOT_1_USERS"})
-            continue
-        for uid in users:
-            payload = {"to": uid, "messages": [{"type": "text", "text": msg}]}
+        results["line"].append({"error": "未設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_BOT_1_TOKEN"})
+    else:
+        for i, cfg in enumerate(configs):
+            token = cfg["token"]
+            users = cfg["users"]
+            if not users:
+                results["line"].append({"bot_index": i + 1, "error": "users 清單為空"})
+                continue
+            payload = {"to": users, "messages": [{"type": "text", "text": msg}]}
             try:
                 r = http_requests.post(
-                    "https://api.line.me/v2/bot/message/push",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    "https://api.line.me/v2/bot/message/multicast",
+                    headers={"Authorization": f"Bearer {token}"},
                     json=payload,
                     timeout=15,
                 )
-                results.append({
+                results["line"].append({
                     "bot_index": i + 1,
                     "token_prefix": token[:12] + "...",
-                    "user_id": uid,
+                    "users": users,
                     "status_code": r.status_code,
-                    "response": r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text,
+                    "response": r.json() if "application/json" in r.headers.get("content-type", "") else r.text,
                     "ok": r.status_code == 200,
                 })
             except Exception as e:
-                results.append({"bot_index": i + 1, "user_id": uid, "error": str(e)})
+                results["line"].append({"bot_index": i + 1, "error": str(e)})
 
-    return {"sent": len([r for r in results if r.get("ok")]), "total": len(results), "details": results}
+    # ── Telegram ──────────────────────────────────────────────────────────
+    tg_token, tg_chats = get_telegram_config()
+    if not tg_token or not tg_chats:
+        results["telegram"].append({"error": "未設定 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_IDS"})
+    else:
+        for chat_id in tg_chats:
+            try:
+                r = http_requests.post(
+                    f"https://api.telegram.org/bot{tg_token}/sendMessage",
+                    json={"chat_id": chat_id, "text": msg},
+                    timeout=15,
+                )
+                results["telegram"].append({
+                    "chat_id": chat_id,
+                    "status_code": r.status_code,
+                    "response": r.json(),
+                    "ok": r.status_code == 200,
+                })
+            except Exception as e:
+                results["telegram"].append({"chat_id": chat_id, "error": str(e)})
+
+    line_ok  = sum(1 for r in results["line"]     if r.get("ok"))
+    tg_ok    = sum(1 for r in results["telegram"] if r.get("ok"))
+    return {"line_sent": line_ok, "telegram_sent": tg_ok, "details": results}
 
 
 def _build_parsers(secrets: list[str]) -> list[WebhookParser]:
