@@ -12,6 +12,7 @@
 """
 from fastapi import APIRouter, Path, Query
 from src.utils.logger import logger
+from src.utils.notifier import send_signal_report
 
 router = APIRouter(prefix="/api/volume-flow", tags=["VolumeFlow"])
 
@@ -43,7 +44,11 @@ async def volume_scan_us(
     """
     from src.services.volume_flow_service import scan_us_volume_flow
     extra = [t.strip() for t in tickers.split(",") if t.strip()] if tickers else []
-    return await scan_us_volume_flow(extra_tickers=extra)
+    result = await scan_us_volume_flow(extra_tickers=extra)
+    alerts = result.get("alerts", []) if result else []
+    if alerts:
+        send_signal_report("美股", "量流", "alert", alerts)
+    return result
 
 
 @router.get("/tw/{ticker}")

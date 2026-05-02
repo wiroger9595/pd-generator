@@ -4,6 +4,7 @@
 """
 from fastapi import APIRouter, Query
 from src.utils.logger import logger
+from src.utils.notifier import send_signal_report
 
 router = APIRouter(prefix="/api/events", tags=["Events"])
 
@@ -49,6 +50,7 @@ async def check_us_events(
     from src.services.event_monitor_service import check_us_events as _check
     extra = [t.strip() for t in tickers.split(",") if t.strip()] if tickers else []
     result = await _check(extra_tickers=extra)
+    send_signal_report("美股", "事件", "alert", result.get("events", []))
     logger.info(
         f"[Events] 美股掃描完成 checked={result.get('checked',0)} "
         f"alerts={result.get('new_events',0)}"
