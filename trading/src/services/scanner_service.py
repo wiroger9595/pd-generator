@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from config import (
-    TW_CONFIG, US_CONFIG, CRYPTO_CONFIG, 
+    TW_CONFIG, US_CONFIG, CRYPTO_CONFIG,
     AUTO_TRADE_ENABLED, TW_TRADE_AMOUNT, US_TRADE_AMOUNT, CRYPTO_TRADE_AMOUNT
 )
 from src.stock.crawler import get_tw_stock_list, get_us_stock_list, get_crypto_stock_list
@@ -13,6 +14,48 @@ from src.database.db_handler import (
     save_to_db, get_active_tickers, record_buy, record_sell
 )
 from src.utils.logger import logger
+
+# ── TQuant-Lab 倉位管理輔助 ──────────────────────────────────────────────
+
+_MAX_HOLD_DAYS = 15   # 融資策略最長持倉天數
+_TARGET_RISK   = 0.01  # 每筆承擔總資金的 1% 日波動風險（風險平價）
+
+
+def _vol_adjusted_amount(base_amount: float, price: float, df) -> float:
+    """波動率調整倉位（TQuant-Lab VAM 策略）
+
+    每筆金額 = min(base_amount, target_risk / 日波動率)
+    讓每筆對組合的風險貢獻大致相等，高波動股自動縮倉。
+    """
+    if df is None or len(df) < 20:
+        return base_amount
+    try:
+        vol = float(np.std(df["Close"].pct_change().dropna().values[-60:]))
+        if vol <= 0:
+            return base_amount
+        # 以 base_amount 為上限，依波動率縮放
+        risk_amt = (base_amount * _TARGET_RISK) / vol
+        return min(base_amount, max(price, risk_amt))  # 至少買 1 股
+    except Exception:
+        return base_amount
+
+
+def _force_exit_stale_holdings(holdings_map: dict, market: str, trading_service, record_sell_fn, db_m: str):
+    """強制平倉超過 _MAX_HOLD_DAYS 的持倉（TQuant-Lab 融資維持率策略時間上限）"""
+    today = datetime.now().date()
+    for ticker, holding in list(holdings_map.items()):
+        buy_date_str = holding.get("buy_date")
+        if not buy_date_str:
+            continue
+        try:
+            buy_date = datetime.strptime(buy_date_str, "%Y-%m-%d").date()
+            hold_days = (today - buy_date).days
+            if hold_days >= _MAX_HOLD_DAYS:
+                logger.info(f"[Scanner] ⏱️ {ticker} 持倉 {hold_days} 天已達上限，強制出場")
+                asyncio.ensure_future(trading_service.execute_smart_sell(ticker, 0))
+                record_sell_fn(db_m, ticker, holding.get("entry_price", 0))
+        except Exception:
+            pass
 
 async def run_scan(market, trading_service=None):
     """[專業猎人版] 執行市場掃描，整合動能、量能、做空與基本面維度"""
@@ -224,22 +267,29 @@ async def run_scan(market, trading_service=None):
     # 9. 獵人自動交易
     if AUTO_TRADE_ENABLED and trading_service:
         db_m = market.upper() if market != "crypto" else "Crypto"
-        # A. 自動撤單與賣出
+        # A. 自動撤單與賣出（含持倉時間上限：TQuant-Lab 融資策略，最長 15 交易日）
         for t in set([s['ticker'] for s in sell_holdings + sell_watched]):
             await trading_service.cancel_all_orders(t)
         for s in sell_holdings:
             res = await trading_service.execute_smart_sell(s['ticker'], 0)
             if "error" not in res: record_sell(db_m, s['ticker'], s['price'])
-        
-        # B. 精準買入 (前 3 強)
+
+        # 時間上限強制出場：超過 15 個交易日自動賣出
+        _force_exit_stale_holdings(holdings_map, market, trading_service, record_sell, db_m)
+
+        # B. 精準買入 (前 3 強)：波動率調整倉位（TQuant-Lab 風險平價）
         t_amt = US_TRADE_AMOUNT if market == 'us' else TW_TRADE_AMOUNT
         for s in buy_signals[:3]:
             try:
-                qty = int(t_amt / s['price'])
+                price = s['price']
+                # 波動率調整倉位：用近 60 日標準差讓每筆的風險貢獻相等
+                df_for_vol = fetch_history(s['ticker'])
+                vol_adj_amt = _vol_adjusted_amount(t_amt, price, df_for_vol)
+                qty = int(vol_adj_amt / price)
                 if qty > 0:
                     p = s['buy_points']
                     res = await trading_service.execute_smart_buy(s['ticker'], qty, p.get('entry_price'), p.get('take_profit'))
-                    if "error" not in res: record_buy(db_m, s['ticker'], s['name'], s['price'])
+                    if "error" not in res: record_buy(db_m, s['ticker'], s['name'], price)
             except: pass
 
     return {"buy": buy_signals, "sell_holdings": sell_holdings, "sell_watched": sell_watched}

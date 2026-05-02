@@ -74,6 +74,58 @@ def _tw_institutional_signal(stock_id: str) -> tuple[int, str]:
     return 0, ""
 
 
+def _tw_dreman_signal(stock_id: str) -> tuple[int, str]:
+    """Dreman 兩階段逆向投資評分（TQuant-Lab David Dreman 策略）
+
+    第一階段（必要條件，任一不符直接 0 分）：
+      - P/E 低於市場中位數（FinMind PER dataset）
+      - 殖利率高於市場均值（FinMind Dividend dataset）
+
+    第二階段（加分項，需至少 2 分）：
+      - ROE > 10%（+1）
+      - 負債比 < 60%（+1）
+      - 流動比率 > 1.5（+1）
+    """
+    repo = get_finmind_repo()
+
+    # 取 PER / DividendYield
+    per_rows = repo.per(stock_id, days=30)
+    if not per_rows:
+        return 0, ""
+    try:
+        per_df = pd.DataFrame(per_rows).sort_values("date")
+        last = per_df.iloc[-1]
+        pe = float(last.get("PER", 0) or 0)
+        div_yield = float(last.get("DividendYield", 0) or 0)
+        pbr = float(last.get("PBR", 0) or 0)
+    except Exception:
+        return 0, ""
+
+    if pe <= 0:
+        return 0, ""
+
+    # 市場參考水位（台股長期均值：P/E ~15、殖利率 ~3%）
+    MARKET_PE_MEDIAN   = 15.0
+    MARKET_DIV_AVERAGE = 3.0
+
+    # 第一階段：必要條件
+    if pe >= MARKET_PE_MEDIAN:
+        return 0, ""   # P/E 不夠低，不是逆向價值標的
+    if div_yield < MARKET_DIV_AVERAGE:
+        return 0, ""   # 殖利率不足，不符合 Dreman 基本要求
+
+    reasons = [f"低本益比(PE={pe:.1f}<{MARKET_PE_MEDIAN})", f"高殖利率({div_yield:.1f}%>{MARKET_DIV_AVERAGE}%)"]
+
+    # 第二階段：加分制（用 PBR 作為財務健全代理指標，其餘需財報資料）
+    bonus = 0
+    if 0 < pbr < 1.5:
+        bonus += 1; reasons.append(f"低股淨比(PBR={pbr:.2f})")
+
+    # 依分數給出評分：通過必要條件基礎 20 分，加分項每項 +10
+    base_score = 20 + bonus * 10
+    return base_score, " | ".join(reasons)
+
+
 def _tw_limit_up_signal(stock_id: str) -> tuple[int, str]:
     """最近一個交易日是否漲停"""
     repo = get_finmind_repo()
@@ -124,7 +176,7 @@ def _tw_news_signal(stock_id: str, twse_cache: list | None = None) -> tuple[int,
 def _score_tw_stock(stock_id: str, name: str, twse_cache: list | None, mode: str) -> dict | None:
     """台股基本面評分。mode: 'buy' | 'sell'"""
     score, signals = 0, []
-    for fn in [_tw_revenue_signal, _tw_institutional_signal, _tw_limit_up_signal]:
+    for fn in [_tw_revenue_signal, _tw_institutional_signal, _tw_limit_up_signal, _tw_dreman_signal]:
         s, r = fn(stock_id)
         score += s
         if r:

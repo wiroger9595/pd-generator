@@ -1,10 +1,21 @@
 import requests
 import time
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from src.database.db_handler import get_all_users
+from src.utils.logger import logger
 
-load_dotenv()
+# 從當前目錄往上找 .env，確保無論從哪裡啟動都能讀到
+def _find_dotenv() -> Path | None:
+    for parent in [Path.cwd(), *Path.cwd().parents]:
+        candidate = parent / ".env"
+        if candidate.exists():
+            return candidate
+    return None
+
+_env_path = _find_dotenv()
+load_dotenv(_env_path, override=True)
 
 
 # ── LINE 設定 ─────────────────────────────────────────────────────────────────
@@ -68,7 +79,10 @@ def get_telegram_config() -> tuple[str, list[str]]:
 def _telegram_send(bot_token: str, chat_ids: list[str], text: str) -> int:
     """Telegram sendMessage，回傳成功送出人數。Telegram 每則上限 4096 字元，超過自動切割。"""
     if not bot_token or not chat_ids:
+        logger.warning("[Telegram] 無 token 或 chat_id，跳過發送")
         return 0
+
+    logger.info(f"[Telegram] 準備發送至 {len(chat_ids)} 個 chat 帳號")
 
     # 切割長訊息
     MAX = 4096
@@ -85,10 +99,12 @@ def _telegram_send(bot_token: str, chat_ids: list[str], text: str) -> int:
                 )
                 if r.status_code == 200:
                     sent += 1
+                    logger.info(f"[Telegram] 已發送至 chat={chat_id}")
                 else:
-                    print(f"⚠️ [Telegram] 發送失敗 chat={chat_id}: {r.text}")
+                    logger.error(f"[Telegram] 發送失敗 chat={chat_id}: {r.text}")
             except Exception as e:
-                print(f"❌ [Telegram] 發送異常: {e}")
+                logger.error(f"[Telegram] 發送異常: {e}")
+    logger.info(f"[Telegram] 本次共成功發送 {sent} 則訊息")
     return sent
 
 
@@ -113,14 +129,14 @@ def _broadcast(text: str, label: str = "訊息", channels: set = _ALL_CHANNELS) 
         tg_sent = _telegram_send(tg_token, tg_chats, text)
 
     if line_sent == 0 and tg_sent == 0:
-        print(f"⚠️ [Notify] {label}：{'LINE 和 Telegram 皆未設定或發送失敗' if channels == _ALL_CHANNELS else '目標管道未設定或發送失敗'}")
+        logger.warning(f"[Notify] {label}：{'LINE 和 Telegram 皆未設定或發送失敗' if channels == _ALL_CHANNELS else '目標管道未設定或發送失敗'}")
     else:
         parts = []
         if line_sent:
             parts.append(f"LINE×{line_sent}")
         if tg_sent:
             parts.append(f"Telegram×{tg_sent}")
-        print(f"✅ [Notify] {label} 已發送 → {' + '.join(parts)}")
+        logger.info(f"[Notify] {label} 已發送 → {' + '.join(parts)}")
 
 
 # ── 通用維度報告（Telegram only）──────────────────────────────────────────────
@@ -164,6 +180,10 @@ def format_stock_info(s):
 # ── 各類報告函式 ──────────────────────────────────────────────────────────────
 
 def send_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[]):
+    """掃描報告：有結果才發，無結果不發"""
+    if not buy_stocks and not sell_holdings and not sell_watched:
+        return  # 無任何訊號，不發通知
+
     header = f"【📊 {market_name} 盤後掃描報告】\n日期: {time.strftime('%Y-%m-%d')}\n{'='*15}\n\n"
     body = ""
     if sell_holdings:
@@ -181,16 +201,21 @@ def send_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[]
         for s in sell_watched:
             body += format_stock_info(s)
         body += "\n"
-    if not body:
-        body = "今日無特別買賣訊號。\n"
     _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 綜合報告", channels={"telegram"})
 
 
 def send_line_report(market_name, stocks):
+    """LINE 報告：只發 buy_stocks，無訊號不發"""
+    if not stocks:
+        return
     send_combined_report(market_name, buy_stocks=stocks, sell_holdings=[], sell_watched=[])
 
 
 def send_fundamental_report(market_name: str, signal_type: str, items: list):
+    """基本面報告：有訊號才發，無訊號不發"""
+    if not items:
+        return
+
     emoji = "📈" if signal_type == "buy" else "📉"
     label = "買進" if signal_type == "buy" else "賣出"
     header = (
@@ -198,17 +223,18 @@ def send_fundamental_report(market_name: str, signal_type: str, items: list):
         f"日期: {time.strftime('%Y-%m-%d')}\n"
         f"{'='*15}\n\n"
     )
-    if not items:
-        body = f"今日無基本面{label}訊號。\n"
-    else:
-        body = "".join(
-            f"• {s.get('name', '')} ({s.get('ticker', '')})\n  評分: {s.get('score', 0)} | {s.get('reason', '')}\n"
-            for s in items
-        )
+    body = "".join(
+        f"• {s.get('name', '')} ({s.get('ticker', '')})\n  評分: {s.get('score', 0)} | {s.get('reason', '')}\n"
+        for s in items
+    )
     _broadcast(header + body + f"\n{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 基本面{label}", channels={"telegram"})
 
 
 def send_summary_report(market_name: str, results: list):
+    """共振買進報告：有訊號才發，無訊號不發"""
+    if not results:
+        return
+
     dim_order = ["技術面", "籌碼面", "基本面", "消息面"]
     stars = {4: "★★★★", 3: "★★★", 2: "★★", 1: "★"}
     header = (
@@ -216,23 +242,24 @@ def send_summary_report(market_name: str, results: list):
         f"日期: {time.strftime('%Y-%m-%d')}\n"
         f"{'='*15}\n\n"
     )
-    if not results:
-        body = "今日無多維度共振訊號。\n"
-    else:
-        body = ""
-        for i, s in enumerate(results, 1):
-            dims = s.get("dimensions", {})
-            dc = len(dims)
-            body += f"{stars.get(dc,'★')} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  共振:{dc}/4  總分:{s.get('total_score',0)}\n"
-            for lbl in dim_order:
-                if lbl in dims:
-                    d = dims[lbl]
-                    body += f"  [{lbl}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
-            body += "\n"
+    body = ""
+    for i, s in enumerate(results, 1):
+        dims = s.get("dimensions", {})
+        dc = len(dims)
+        body += f"{stars.get(dc,'★')} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  共振:{dc}/4  總分:{s.get('total_score',0)}\n"
+        for lbl in dim_order:
+            if lbl in dims:
+                d = dims[lbl]
+                body += f"  [{lbl}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
+        body += "\n"
     _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 共振買進", channels={"telegram"})
 
 
 def send_summary_sell_report(market_name: str, results: list):
+    """賣出警示報告：有訊號才發，無訊號不發"""
+    if not results:
+        return
+
     dim_order = ["籌碼面", "基本面", "消息面"]
     warn_stars = {3: "🔴🔴🔴", 2: "🔴🔴", 1: "🔴"}
     header = (
@@ -240,23 +267,24 @@ def send_summary_sell_report(market_name: str, results: list):
         f"日期: {time.strftime('%Y-%m-%d')}\n"
         f"{'='*15}\n\n"
     )
-    if not results:
-        body = "今日庫存+觀察名單無多維度賣出訊號。\n"
-    else:
-        body = ""
-        for i, s in enumerate(results, 1):
-            dims = s.get("dimensions", {})
-            dc = len(dims)
-            body += f"{warn_stars.get(dc,'🔴')} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  警示:{dc}/3  總分:{s.get('total_score',0)}\n"
-            for lbl in dim_order:
-                if lbl in dims:
-                    d = dims[lbl]
-                    body += f"  [{lbl}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
-            body += "\n"
+    body = ""
+    for i, s in enumerate(results, 1):
+        dims = s.get("dimensions", {})
+        dc = len(dims)
+        body += f"{warn_stars.get(dc,'🔴')} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  警示:{dc}/3  總分:{s.get('total_score',0)}\n"
+        for lbl in dim_order:
+            if lbl in dims:
+                d = dims[lbl]
+                body += f"  [{lbl}] 分:{d.get('score',0)} {d.get('reason','')[:40]}\n"
+        body += "\n"
     _broadcast(header + body + f"{'='*15}\n⚠️ 請評估是否減碼或出場，投資有風險。", f"{market_name} 賣出警示", channels={"telegram"})
 
 
 def send_screener_report(market_name: str, results: list):
+    """選股報告：有訊號才發，無訊號不發"""
+    if not results:
+        return
+
     signal_emoji = {
         "strong_buy": "🚀🚀", "buy": "🚀",
         "neutral": "➖", "sell": "📉", "strong_sell": "📉📉",
@@ -269,30 +297,30 @@ def send_screener_report(market_name: str, results: list):
         f"日期: {time.strftime('%Y-%m-%d')}\n"
         f"{'='*15}\n\n"
     )
-    if not results:
-        body = "今日無符合條件的標的。\n"
-    else:
-        body = ""
-        is_tw = any("chip" in r.get("dimensions", {}) for r in results)
-        dim_order = dim_order_tw if is_tw else dim_order_us
-        for i, s in enumerate(results, 1):
-            sig = s.get("signal", "neutral")
-            emoji = signal_emoji.get(sig, "➖")
-            dims = s.get("dimensions", {})
-            providers = s.get("providers", [])
-            body += f"{emoji} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  總分:{s.get('overall_score',0)}  訊號:{sig}\n"
-            if providers:
-                body += f"  多方確認: {'+'.join(providers)}\n"
-            for dk in dim_order:
-                if dk in dims:
-                    d = dims[dk]
-                    body += f"  [{dim_label.get(dk, dk)}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
-            body += "\n"
+    body = ""
+    is_tw = any("chip" in r.get("dimensions", {}) for r in results)
+    dim_order = dim_order_tw if is_tw else dim_order_us
+    for i, s in enumerate(results, 1):
+        sig = s.get("signal", "neutral")
+        emoji = signal_emoji.get(sig, "➖")
+        dims = s.get("dimensions", {})
+        providers = s.get("providers", [])
+        body += f"{emoji} {i}. {s.get('name', s.get('ticker',''))} ({s.get('ticker','')})  總分:{s.get('overall_score',0)}  訊號:{sig}\n"
+        if providers:
+            body += f"  多方確認: {'+'.join(providers)}\n"
+        for dk in dim_order:
+            if dk in dims:
+                d = dims[dk]
+                body += f"  [{dim_label.get(dk, dk)}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
+        body += "\n"
     _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 選股報告", channels={"telegram"})
 
 
 def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
-    """每日統整報告：買進共振 + 賣出警示 合成一則訊息（LINE + Telegram）"""
+    """每日統整報告：只發有訊號時，無訊號不發"""
+    if not buy_results and not sell_results:
+        return
+
     dim_order_buy  = ["技術面", "籌碼面", "基本面", "消息面"]
     dim_order_sell = ["籌碼面", "基本面", "消息面"]
     buy_stars  = {4: "★★★★", 3: "★★★", 2: "★★", 1: "★"}
@@ -304,6 +332,7 @@ def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
         f"{'='*15}\n\n"
     )
 
+    body = ""
     if buy_results:
         body = "🔥 【多維共振買進】\n"
         for i, s in enumerate(buy_results, 1):
@@ -315,8 +344,6 @@ def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
                     d = dims[lbl]
                     body += f"  [{lbl}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
         body += "\n"
-    else:
-        body = "🔥 【多維共振買進】\n今日無共振訊號。\n\n"
 
     if sell_results:
         body += "⚠️ 【庫存賣出警示】\n"
@@ -329,7 +356,5 @@ def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
                     d = dims[lbl]
                     body += f"  [{lbl}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
         body += "\n"
-    else:
-        body += "⚠️ 【庫存賣出警示】\n今日無警示。\n\n"
 
     _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 每日統整")

@@ -64,6 +64,14 @@ class FinMindRepository:
     def news(self, stock_id: str, days: int = 7) -> list:
         return self.get("TaiwanStockNews", stock_id, days=days)
 
+    def per(self, stock_id: str, days: int = 30) -> list:
+        """本益比 (PER)、殖利率 (DividendYield)、股價淨值比 (PBR)"""
+        return self.get("TaiwanStockPER", stock_id, days=days)
+
+    def dividend(self, stock_id: str, days: int = 400) -> list:
+        """現金股息資料，用於計算近期殖利率"""
+        return self.get("TaiwanStockDividend", stock_id, days=days)
+
 
 # ── 模組級 singleton（各 service 直接 import 使用）─────────────────────
 _repo: FinMindRepository | None = None

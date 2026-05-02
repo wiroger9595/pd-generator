@@ -1,4 +1,5 @@
 import os
+import json
 import sqlite3
 import pandas as pd
 from datetime import datetime
@@ -384,6 +385,95 @@ def get_all_eod_fundamental(date_str: str = None) -> list:
     conn.close()
     cols = ["date", "ticker", "name", "revenue", "revenue_yoy", "revenue_mom"]
     return [dict(zip(cols, r)) for r in rows]
+
+
+# ── Screener 背景工作結果快取 ─────────────────────────────────────────────
+
+def _screener_db_path() -> str:
+    path = os.path.join(os.getcwd(), "data", "screener.db")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
+
+def _init_screener_db():
+    db_path = _screener_db_path()
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS screener_tasks (
+            task_id  TEXT PRIMARY KEY,
+            market   TEXT,
+            status   TEXT,
+            result   TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def save_screener_result(task_id: str, market: str, status: str, result: dict):
+    db_path = _init_screener_db()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("""
+        INSERT OR REPLACE INTO screener_tasks (task_id, market, status, result, created_at, updated_at)
+        VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM screener_tasks WHERE task_id=?), ?), ?)
+    """, (task_id, market, status, json.dumps(result, ensure_ascii=False), task_id, now, now))
+    conn.commit()
+    conn.close()
+
+
+def update_screener_status(task_id: str, status: str):
+    db_path = _screener_db_path()
+    if not os.path.exists(db_path):
+        return
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("UPDATE screener_tasks SET status=?, updated_at=? WHERE task_id=?", (status, now, task_id))
+    conn.commit()
+    conn.close()
+
+
+def get_screener_result(task_id: str) -> dict | None:
+    db_path = _screener_db_path()
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("SELECT task_id, market, status, result, created_at, updated_at FROM screener_tasks WHERE task_id=?", (task_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return None
+    task_id, market, status, result_json, created_at, updated_at = row
+    result = json.loads(result_json) if result_json else {}
+    return {"task_id": task_id, "market": market, "status": status, "created_at": created_at, "updated_at": updated_at, **result}
+
+
+def get_latest_screener_result(market: str) -> dict | None:
+    db_path = _screener_db_path()
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("""
+        SELECT task_id, market, status, result, created_at, updated_at
+        FROM screener_tasks
+        WHERE market=? AND status='done'
+        ORDER BY updated_at DESC LIMIT 1
+    """, (market,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return None
+    task_id, market, status, result_json, created_at, updated_at = row
+    result = json.loads(result_json) if result_json else {}
+    return {"task_id": task_id, "market": market, "status": status, "created_at": created_at, "updated_at": updated_at, **result}
 
 
 def get_eod_fundamental(ticker: str, date_str: str = None) -> dict:

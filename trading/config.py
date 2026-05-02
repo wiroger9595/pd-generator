@@ -1,7 +1,15 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+def _find_dotenv() -> Path | None:
+    for parent in [Path.cwd(), *Path.cwd().parents]:
+        candidate = parent / ".env"
+        if candidate.exists():
+            return candidate
+    return None
+
+load_dotenv(_find_dotenv(), override=True)
 
 LINE_TOKEN = os.getenv("LINE_TOKEN")
 

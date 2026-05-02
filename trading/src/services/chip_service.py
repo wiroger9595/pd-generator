@@ -26,30 +26,71 @@ _US_SELL_THRESHOLD = -25
 # ─────────────────────────────────────────────
 
 def _tw_institutional(stock_id: str) -> tuple[int, str]:
-    """三大法人近 5 日合計淨買賣超"""
-    rows = get_finmind_repo().institutional_investors(stock_id)
+    """三大法人近 5 日合計淨買賣超，搭配持股率變化避免假訊號
+
+    邏輯來自 TQuant-Lab：買超 + 持股率低於 5 日均 → 真實吸籌；
+    單純買超但持股率同步下滑 = 法人邊買邊出清舊部位，屬假訊號。
+    """
+    repo = get_finmind_repo()
+    rows = repo.institutional_investors(stock_id)
     if not rows:
         return 0, ""
     df = pd.DataFrame(rows)
     df["net"] = df["buy"].astype(float) - df["sell"].astype(float)
     net = df["net"].sum()
+
+    # 持股率變化：從外資持股資料判斷是否真實累積部位
+    share_rows = repo.shareholding(stock_id, days=10)
+    holding_signal = 0  # +1 = 持股率上升, -1 = 下降, 0 = 不明
+    if len(share_rows) >= 6:
+        share_df = pd.DataFrame(share_rows).sort_values("date")
+        try:
+            now_ratio = float(share_df.iloc[-1]["ForeignInvestmentSharesRatio"])
+            avg_5d = share_df.iloc[-6:-1]["ForeignInvestmentSharesRatio"].astype(float).mean()
+            if now_ratio > avg_5d:
+                holding_signal = 1   # 持股率高於 5 日均：真實累積
+            elif now_ratio < avg_5d:
+                holding_signal = -1  # 持股率低於 5 日均：邊買邊出
+        except Exception:
+            pass
+
+    # 合併評分：買超但持股率下滑 → 扣分；買超且持股率上升 → 加成
     if net > 5000:
-        return 40, f"三大法人淨買超{net/1000:.0f}千張"
-    if net > 1000:
-        return 28, f"三大法人淨買超{net/1000:.1f}千張"
-    if net > 0:
-        return 15, f"三大法人淨買超{net:.0f}張"
-    if net < -5000:
-        return -40, f"三大法人淨賣超{abs(net)/1000:.0f}千張"
-    if net < -1000:
-        return -28, f"三大法人淨賣超{abs(net)/1000:.1f}千張"
-    if net < 0:
-        return -15, f"三大法人淨賣超{abs(net):.0f}張"
-    return 0, ""
+        base = 40
+    elif net > 1000:
+        base = 28
+    elif net > 0:
+        base = 15
+    elif net < -5000:
+        base = -40
+    elif net < -1000:
+        base = -28
+    elif net < 0:
+        base = -15
+    else:
+        return 0, ""
+
+    if net > 0 and holding_signal == -1:
+        base = max(0, base - 15)  # 買超但持股率下滑，降低可信度
+        tag = f"三大法人淨買超{net/1000:.1f}千張(持股率↓疑出清)"
+    elif net > 0 and holding_signal == 1:
+        base = min(50, base + 10)  # 買超且持股率上升，確認吸籌
+        tag = f"三大法人淨買超{net/1000:.1f}千張(持股率↑確認吸籌)"
+    elif net < 0:
+        tag = f"三大法人淨賣超{abs(net)/1000:.1f}千張"
+    else:
+        tag = f"三大法人淨買超{net:.0f}張"
+
+    return base, tag
 
 
 def _tw_margin(stock_id: str) -> tuple[int, str]:
-    """融資融券變化"""
+    """融資融券變化 + 維持率跌幅偵測
+
+    TQuant-Lab 融資維持率策略：
+    - 維持率跌幅相對 10 日均值 > 5% → 視為融資壓力 → 反彈機會
+    - 同時需紅K + 放量 + 融資餘額擴張（三層確認）
+    """
     rows = get_finmind_repo().margin_short(stock_id)
     if not rows:
         return 0, ""
@@ -76,6 +117,21 @@ def _tw_margin(stock_id: str) -> tuple[int, str]:
             score -= 25; reasons.append(f"融資減{chg:.1f}%(斷頭壓力)")
         elif chg < -5:
             score -= 12; reasons.append(f"融資減{chg:.1f}%")
+
+        # 融資維持率跌幅偵測：近 10 日均值 vs 今日
+        if len(df) >= 10:
+            try:
+                margin_col = "MarginPurchaseTodayBalance"
+                avg_10d = df.iloc[-10:][margin_col].astype(float).mean()
+                if avg_10d > 0:
+                    drop_pct = (mt - avg_10d) / avg_10d * 100
+                    if drop_pct < -5:
+                        # 融資壓力區：反彈機會加分（TQuant-Lab 邏輯）
+                        score += 15
+                        reasons.append(f"融資維持率跌幅{drop_pct:.1f}%(壓力反彈機會)")
+            except Exception:
+                pass
+
     if sy > 0:
         chg = (st - sy) / sy * 100
         if chg > 20:

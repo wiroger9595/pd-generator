@@ -113,8 +113,8 @@ async def _tw_screen_from_cache(all_chip: list, all_fund: list, top_n: int) -> l
     from src.services.recommendation_service import get_tw_recommendations
     from src.services.ai_news_service import analyze_tw_news_sentiment
 
-    # 技術面：用 FinMind-based 推薦服務（無 AV 限制）
-    tech_result = await _safe(get_tw_recommendations(top_n=50, max_scan=50))
+    # 技術面：用 FinMind-based 推薦服務（無 AV 限制），60s timeout 保護
+    tech_result = await _safe(get_tw_recommendations(top_n=50, max_scan=50), timeout=60)
     tech_map: dict = {}
     for rec in (tech_result.get("recommendations", []) if tech_result else []):
         t = rec.get("ticker", "")
@@ -325,9 +325,13 @@ async def screen_us_stocks(top_n: int = 5) -> dict:
 # 工具
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _safe(coro):
+async def _safe(coro, timeout: float = 30):
+    """帶 timeout 的安全呼叫，避免單一步驟卡住整個 screener"""
     try:
-        return await coro
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning(f"[Screener] call timed out after {timeout}s")
+        return {}
     except Exception as e:
         logger.warning(f"[Screener] safe call failed: {e}")
         return {}

@@ -213,9 +213,17 @@ async def get_tw_full_analysis(ticker: str, name: str = "") -> dict:
     elif name == "" and fund_data.get("name"):
         name = fund_data["name"]
 
-    # ② 技術面（Alpha Vantage）+ 消息面（Google News + Gemini）— 並行
+    # 取得歷史 K 線，供本地指標計算（EMA40/80、Aroon、逆勢、長期趨勢）
+    df_hist = None
+    try:
+        from src.stock.fetcher import fetch_history
+        df_hist = fetch_history(ticker)
+    except Exception:
+        pass
+
+    # ② 技術面（Alpha Vantage + 本地 K 線）+ 消息面（Google News + Gemini）— 並行
     tech_result, news_result = await asyncio.gather(
-        get_technical_indicators(symbol=ticker, market="tw"),
+        get_technical_indicators(symbol=ticker, market="tw", df=df_hist),
         analyze_tw_news_sentiment(ticker=ticker, name=name),
     )
 
