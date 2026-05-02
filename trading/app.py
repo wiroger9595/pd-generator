@@ -37,6 +37,7 @@ from src.controllers import (
     volume_flow_router,
     tick_stream_router,
     analyst_router,
+    insider_router,
 )
 
 
@@ -219,6 +220,7 @@ app.include_router(ai_news_router)
 app.include_router(monitor_router)
 app.include_router(tick_stream_router)
 app.include_router(analyst_router)
+app.include_router(insider_router)
 
 
 if __name__ == "__main__":
