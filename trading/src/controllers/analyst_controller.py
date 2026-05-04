@@ -61,6 +61,7 @@ async def analyst_us(ticker: str = Path(..., description="美股代號，如 AAP
         }
 
     logger.info(f"[Analyst] {ticker} score={score}")
+
     return {
         "status": "success",
         "ticker": ticker,

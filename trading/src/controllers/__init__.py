@@ -17,6 +17,7 @@ from .volume_flow_controller import router as volume_flow_router
 from .tick_stream_controller import router as tick_stream_router
 from .analyst_controller import router as analyst_router
 from .insider_controller import router as insider_router
+from .congress_trades_controller import router as congress_trades_router
 
 __all__ = [
     "health_router",
@@ -38,4 +39,5 @@ __all__ = [
     "tick_stream_router",
     "analyst_router",
     "insider_router",
+    "congress_trades_router",
 ]

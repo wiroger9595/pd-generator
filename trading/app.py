@@ -6,9 +6,12 @@ Trading System — FastAPI 入口
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+import json as _json
+import time as _time
 
 from src.broker.manager import BrokerManager
 from src.services.trading_service import TradingService
@@ -38,6 +41,7 @@ from src.controllers import (
     tick_stream_router,
     analyst_router,
     insider_router,
+    congress_trades_router,
 )
 
 
@@ -126,10 +130,19 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
         h, m = cron_str.split(":")
         scheduler.add_job(fn, CronTrigger(hour=h, minute=m), args=args or [])
 
+    async def _congress_trades():
+        from src.services.congress_trades_service import run_congress_trades_scan
+        send_line = os.getenv("CONGRESS_TRADES_NOTIFY_LINE", "false").lower() == "true"
+        channels = {"telegram", "line"} if send_line else {"telegram"}
+        await run_congress_trades_scan(pages=3, notify=True, channels=channels)
+
     _add(SCHEDULE_CONFIG.get("DAILY_ANALYSIS_TW_TIME", "14:47"), _daily_tw)
     _add(SCHEDULE_CONFIG.get("DAILY_ANALYSIS_US_TIME", "06:47"), _daily_us)
     _add(SCHEDULE_CONFIG.get("SELL_SCAN_TW_TIME", "15:17"), get_sell_recommendations, ["tw"])
     _add(SCHEDULE_CONFIG.get("SELL_SCAN_US_TIME", "07:17"), get_sell_recommendations, ["us"])
+    # 國會議員交易：美東 21:00（台灣時間隔日 09:00），週一至週五
+    h, m = SCHEDULE_CONFIG.get("CONGRESS_TRADES_TIME", "21:00").split(":")
+    scheduler.add_job(_congress_trades, CronTrigger(hour=h, minute=m, day_of_week="mon-fri"))
 
 
 async def _auto_subscribe_tick_stream(tick_stream):
@@ -177,7 +190,8 @@ _TAGS = [
     {"name": "EOD",          "description": "🗄️ **EOD 快取** — 盤後批次同步籌碼+基本面到 SQLite"},
     {"name": "Monitor",      "description": "👁️ **盤中監控** — 台股盤中即時異常偵測"},
     {"name": "Trade",        "description": "🤖 **自動交易** — 美股 IB / 台股永豐 / 玉山下單"},
-    {"name": "Analyst",      "description": "🎯 **分析師評等** — FMP Wall Street 買進/持有/賣出票數 + 目標價共識"},
+    {"name": "Analyst",       "description": "🎯 **分析師評等** — FMP Wall Street 買進/持有/賣出票數 + 目標價共識"},
+    {"name": "CongressTrades","description": "🏛 **國會議員交易** — Capitol Trades STOCK Act 申報，議員買賣資訊差監控"},
 ]
 
 app = FastAPI(
@@ -202,6 +216,125 @@ app = FastAPI(
     openapi_tags=_TAGS,
 )
 
+# ── Telegram 通知中介層（所有 /api/* 呼叫自動推播）────────────────────
+
+_SKIP_PATHS = {"/health", "/docs", "/redoc", "/openapi.json", "/api/line/test"}
+_SKIP_PREFIXES = ("/docs/", "/redoc/", "/_")
+
+# congress-trades /scan /buys /sells 自行發送 Telegram，不重複推播；/report 由 middleware 處理（plain-text，另走 service 層）
+_SELF_NOTIFY_PATHS = {"/api/congress-trades/scan", "/api/congress-trades/buys", "/api/congress-trades/sells"}
+
+
+def _build_notify_text(path: str, qs: str, body: bytes, status: int, elapsed_ms: float) -> str:
+    """從 response body 萃取關鍵資訊，組成 Telegram 推播文字。"""
+    label = path
+    extra = ""
+    try:
+        data = _json.loads(body)
+        ticker = data.get("ticker") or data.get("symbol") or ""
+        status_val = data.get("status", "")
+        # 嘗試萃取分數
+        score = data.get("overall_score") or data.get("score") or data.get("sentiment_score")
+        signal = data.get("signal") or data.get("sentiment") or ""
+        reason = data.get("reason") or data.get("summary") or ""
+        parts = []
+        if ticker:
+            parts.append(f"🎯 {ticker}")
+        if score is not None:
+            parts.append(f"分數: {score}")
+        if signal:
+            parts.append(f"訊號: {signal}")
+        if reason and len(str(reason)) < 120:
+            parts.append(str(reason))
+        if status_val and status_val != "success":
+            parts.append(f"[{status_val}]")
+        extra = " | ".join(parts)
+    except Exception:
+        pass
+
+    qs_str = f"?{qs}" if qs else ""
+    header = f"📡 API 呼叫\n`{path}{qs_str}`"
+    body_line = f"\n{extra}" if extra else ""
+    footer = f"\nHTTP {status} · {elapsed_ms:.0f}ms"
+    return header + body_line + footer
+
+
+@app.middleware("http")
+async def _telegram_notify_middleware(request: Request, call_next):
+    path = request.url.path
+    qs = request.url.query
+
+    # 跳過非 API 路徑
+    if path in _SKIP_PATHS or any(path.startswith(p) for p in _SKIP_PREFIXES):
+        return await call_next(request)
+
+    # 跳過非 /api/ 開頭的路徑
+    if not path.startswith("/api/"):
+        return await call_next(request)
+
+    # 跳過自行通知的路徑（congress-trades /scan /buys /sells 已在 service 層發送）
+    if path in _SELF_NOTIFY_PATHS:
+        return await call_next(request)
+
+    import asyncio
+
+    t0 = _time.monotonic()
+    response = await call_next(request)
+    elapsed = (_time.monotonic() - t0) * 1000
+
+    content_type = response.headers.get("content-type", "")
+    is_json = "application/json" in content_type
+    # 跳過圖片等二進位格式，改以路徑摘要通知
+    is_binary = any(ct in content_type for ct in ("image/", "audio/", "video/"))
+
+    async def _send(text: str):
+        try:
+            from src.utils.notifier import _broadcast
+            await asyncio.get_event_loop().run_in_executor(
+                None, _broadcast, text, "API呼叫", {"telegram"}
+            )
+        except Exception as e:
+            logger.warning(f"[middleware] Telegram 推播失敗: {e}")
+
+    if is_binary:
+        # 二進位回應不讀 body，直接用路徑通知
+        try:
+            qs_str = f"?{qs}" if qs else ""
+            text = f"📡 API 呼叫\n`{path}{qs_str}`\nHTTP {response.status_code} · {elapsed:.0f}ms"
+            asyncio.create_task(_send(text))
+        except Exception as e:
+            logger.warning(f"[middleware] 推播任務建立失敗: {e}")
+        return response
+
+    # 讀出 body（StreamingResponse 只能讀一次，需重建）
+    body_chunks = []
+    async for chunk in response.body_iterator:
+        body_chunks.append(chunk)
+    body = b"".join(body_chunks)
+
+    # 非同步背景發送 Telegram，不阻塞回應
+    try:
+        text = _build_notify_text(path, qs, body if is_json else b"", response.status_code, elapsed)
+        asyncio.create_task(_send(text))
+    except Exception as e:
+        logger.warning(f"[middleware] 推播任務建立失敗: {e}")
+
+    if is_json:
+        # 重建回應，回傳原始 body（不傳 headers 避免 content-length 衝突）
+        return JSONResponse(
+            content=_json.loads(body) if body else {},
+            status_code=response.status_code,
+        )
+    else:
+        # plain-text / markdown 等：重建 StreamingResponse 回傳原始 body
+        from starlette.responses import Response as StarletteResponse
+        return StarletteResponse(
+            content=body,
+            status_code=response.status_code,
+            media_type=content_type,
+        )
+
+
 app.include_router(health_router)
 app.include_router(line_router)
 app.include_router(analysis_router)
@@ -221,6 +354,7 @@ app.include_router(monitor_router)
 app.include_router(tick_stream_router)
 app.include_router(analyst_router)
 app.include_router(insider_router)
+app.include_router(congress_trades_router)
 
 
 if __name__ == "__main__":
