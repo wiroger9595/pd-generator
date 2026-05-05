@@ -5,6 +5,7 @@ fastapi
 uvicorn
 python-dotenv
 requests
+httpx
 lxml
 schedule
 html5lib

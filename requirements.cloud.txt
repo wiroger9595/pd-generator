@@ -11,6 +11,7 @@ python-multipart
 numpy
 pandas
 requests
+httpx
 python-dotenv
 lxml
 html5lib
