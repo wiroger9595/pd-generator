@@ -31,7 +31,7 @@ async def screen_tw_stocks(top_n: int = 5) -> dict:
 
     # ── Phase 0：全市場動能預篩 ────────────────────────────────────────────
     from src.stock.crawler import get_tw_market_movers
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     movers = await loop.run_in_executor(None, lambda: get_tw_market_movers(top_n=80))
     movers_set = {m["ticker"].replace(".TW", "").replace(".TWO", "") for m in movers}
     if movers:
@@ -207,7 +207,7 @@ async def screen_us_stocks(top_n: int = 5) -> dict:
     from src.stock.crawler import get_us_market_movers
 
     # ── Phase 0：全市場動能預篩 ────────────────────────────────────────────
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     market_universe = await loop.run_in_executor(None, lambda: get_us_market_movers(top_n=80))
     if market_universe:
         logger.info(f"[Screener] 全市場預篩: {len(market_universe)} 檔高動能候選")
@@ -263,7 +263,7 @@ async def screen_us_stocks(top_n: int = 5) -> dict:
         from src.data.fmp_provider import FMPProvider
         fmp = FMPProvider()
         if fmp.api_key:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=4) as ex:
                 fmp_futures = [
                     loop.run_in_executor(ex, fmp.get_analyst_data, c["ticker"])

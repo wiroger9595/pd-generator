@@ -6,7 +6,7 @@ import time
 from collections import defaultdict
 from src.repositories.capitol_trades_repository import fetch_trades
 from src.utils.logger import logger
-from src.utils.notifier import _broadcast
+from src.utils.notifier import async_broadcast
 
 
 _PARTY_EMOJI = {"democrat": "🔵", "republican": "🔴", "independent": "⚪"}
@@ -190,26 +190,110 @@ def format_telegram_report(analysis: dict, title_date: str = "") -> str:
     return "\n".join(lines)
 
 
+def get_ticker_summary(trades: list[dict], ticker: str) -> dict:
+    """
+    以單一股票為基準，統計所有買進/賣出資訊。
+
+    Returns:
+        {
+          "ticker": str,
+          "buy_count": int,        # 買進筆數
+          "sell_count": int,       # 賣出筆數
+          "total_buy_value": float, # 買進金額合計
+          "total_sell_value": float,
+          "politician_count": int, # 交易過該股票的不重複議員數
+          "buyers": [{"name", "party", "chamber", "state", "date", "owner", "size", "value"}, ...],
+          "sellers": [...],
+          "first_date": str,
+          "last_date": str,
+        }
+    """
+    ticker = ticker.upper()
+    matched = [
+        t for t in trades
+        if (t.get("ticker") or "").upper() == ticker
+    ]
+
+    buyers_map: dict[str, dict] = {}
+    sellers_map: dict[str, dict] = {}
+    total_buy_value = 0.0
+    total_sell_value = 0.0
+    all_dates = []
+
+    for t in matched:
+        pol = t["politician"]
+        date = t["tx_date"] or ""
+        value = t.get("value") or 0
+        entry = {
+            "name":    pol,
+            "party":   t.get("party", ""),
+            "chamber": t.get("chamber", ""),
+            "state":   t.get("state", ""),
+            "date":    date,
+            "owner":   t.get("owner", ""),
+            "value":   value,
+            "size":    _format_value(value),
+        }
+        if date:
+            all_dates.append(date)
+
+        if t["tx_type"] == "buy":
+            total_buy_value += value
+            existing = buyers_map.get(pol)
+            if existing is None or date > existing["date"]:
+                buyers_map[pol] = entry
+        else:
+            total_sell_value += value
+            existing = sellers_map.get(pol)
+            if existing is None or date > existing["date"]:
+                sellers_map[pol] = entry
+
+    buyers  = sorted(buyers_map.values(),  key=lambda x: x["date"], reverse=True)
+    sellers = sorted(sellers_map.values(), key=lambda x: x["date"], reverse=True)
+
+    buy_trades  = [t for t in matched if t["tx_type"] == "buy"]
+    sell_trades = [t for t in matched if t["tx_type"] != "buy"]
+
+    return {
+        "ticker":            ticker,
+        "buy_count":         len(buy_trades),
+        "sell_count":        len(sell_trades),
+        "total_buy_value":   round(total_buy_value),
+        "total_sell_value":  round(total_sell_value),
+        "total_buy_value_fmt":  _format_value(total_buy_value),
+        "total_sell_value_fmt": _format_value(total_sell_value),
+        "politician_count":  len(set(buyers_map) | set(sellers_map)),
+        "buyer_count":       len(buyers_map),
+        "seller_count":      len(sellers_map),
+        "buyers":            buyers,
+        "sellers":           sellers,
+        "first_date":        min(all_dates) if all_dates else "",
+        "last_date":         max(all_dates) if all_dates else "",
+    }
+
+
 async def run_congress_trades_scan(
     pages: int = 3,
     notify: bool = True,
     channels: set = frozenset({"telegram"}),
+    months: int = 0,
 ) -> dict:
     """
     完整掃描流程：爬取 → 分析 → 通知。
 
     Args:
-        pages:    爬取頁數（每頁 96 筆）
+        pages:    爬取頁數（每頁 96 筆）；months > 0 時自動擴頁
         notify:   是否發送通知
         channels: 發送管道，預設只發 Telegram；排程呼叫時傳 {"line", "telegram"}
+        months:   若 > 0，爬取近 N 個月資料
 
     Returns:
         analysis dict（含 top_buys / top_sells / buy_trades / sell_trades）
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
-    logger.info(f"[CongressTrades] 開始掃描，pages={pages}")
-    trades = await loop.run_in_executor(None, fetch_trades, pages, 96)
+    logger.info(f"[CongressTrades] 開始掃描，pages={pages}, months={months}")
+    trades = await loop.run_in_executor(None, fetch_trades, pages, 96, months)
     logger.info(f"[CongressTrades] 取得 {len(trades)} 筆交易")
 
     analysis = analyze_congress_trades(trades)
@@ -220,6 +304,6 @@ async def run_congress_trades_scan(
 
     if notify:
         report = format_telegram_report(analysis)
-        await loop.run_in_executor(None, _broadcast, report, "國會議員交易動向", channels)
+        await async_broadcast(report, "國會議員交易動向", channels)
 
     return analysis

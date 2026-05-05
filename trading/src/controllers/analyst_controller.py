@@ -25,7 +25,7 @@ async def analyst_us(ticker: str = Path(..., description="美股代號，如 AAP
     from src.services.full_analysis_service import _score_analyst
 
     ticker = ticker.upper()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     fmp = FMPProvider()
 
     if not fmp.api_key:

@@ -50,7 +50,7 @@ async def _gemini_score(ticker: str, title: str, content: str, source: str) -> i
     prompt = _GEMINI_PROMPT.format(
         ticker=ticker, title=title, content=content, source=source
     )
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         raw = await loop.run_in_executor(
             None,
@@ -91,7 +91,7 @@ async def check_tw_events(extra_tickers: list[str] = None) -> dict:
     from src.repositories.google_news_repository import fetch_tw_news
 
     api_token = os.getenv("FINMIND_API_KEY", "")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     mops_events, finmind_events = await asyncio.gather(
         loop.run_in_executor(None, lambda: fetch_mops_announcements(all_tickers)),
@@ -152,7 +152,7 @@ async def check_us_events(extra_tickers: list[str] = None) -> dict:
 
     from src.repositories.sec_edgar_repository import fetch_sec_filings
     from src.repositories.google_news_repository import fetch_us_news
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # SEC EDGAR 8-K（對所有監控標的，也含全市場重大申報）
     sec_events = await loop.run_in_executor(

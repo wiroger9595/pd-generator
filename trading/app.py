@@ -42,6 +42,7 @@ from src.controllers import (
     analyst_router,
     insider_router,
     congress_trades_router,
+    etf_router,
 )
 
 
@@ -91,12 +92,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
     """內部排程工作（本機環境用）"""
     from src.services.scanner_service import run_scan
     from src.services.recommendation_service import get_tw_recommendations, get_provider_recommendations, get_sell_recommendations
-    from src.utils.notifier import send_combined_report
-
-    async def _scan(market):
-        # 此處無法直接存取 app.state，用全域方式取 trading_service
-        # 本機模式下排程器在 lifespan 中建立，trading_service 已存在
-        pass  # scanner_service.run_scan 需要 trading_service，透過 API 觸發較安全
+    from src.utils.notifier import async_combined_report
 
     async def _daily_tw():
         result = await get_tw_recommendations(top_n=5, max_scan=30)
@@ -104,7 +100,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
         buy_list = [{"ticker": r["ticker"], "name": r.get("name", r["ticker"]),
                      "price": r["price"],
                      "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")}} for r in recs]
-        send_combined_report("台股 (FinMind)", buy_list, [], [])
+        await async_combined_report("台股 (FinMind)", buy_list, [], [])
 
     async def _daily_us():
         merged: dict = {}
@@ -124,7 +120,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
         buy_list = [{"ticker": r["ticker"], "name": r.get("name", r["ticker"]),
                      "price": r["price"],
                      "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")}} for r in top]
-        send_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
+        await async_combined_report("美股 (AV/Polygon/Tiingo)", buy_list, [], [])
 
     def _add(cron_str: str, fn, args=None):
         h, m = cron_str.split(":")
@@ -136,10 +132,25 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
         channels = {"telegram", "line"} if send_line else {"telegram"}
         await run_congress_trades_scan(pages=3, notify=True, channels=channels)
 
+    async def _sell_scan(market: str):
+        result = await get_sell_recommendations(market)
+        sell_holdings = result.get("sell_holdings", [])
+        sell_watched  = result.get("sell_watched",  [])
+        if not sell_holdings and not sell_watched:
+            logger.info(f"[SellScan] {market.upper()} 無賣出訊號，略過通知")
+            return
+        def _fmt(items):
+            return [{"ticker": r["ticker"], "name": r["name"],
+                     "price": r["price"], "sell_reason": r["sell_reason"]} for r in items]
+        await async_combined_report(
+            f"{'台股' if market == 'tw' else '美股'} 賣出掃描",
+            [], _fmt(sell_holdings), _fmt(sell_watched),
+        )
+
     _add(SCHEDULE_CONFIG.get("DAILY_ANALYSIS_TW_TIME", "14:47"), _daily_tw)
     _add(SCHEDULE_CONFIG.get("DAILY_ANALYSIS_US_TIME", "06:47"), _daily_us)
-    _add(SCHEDULE_CONFIG.get("SELL_SCAN_TW_TIME", "15:17"), get_sell_recommendations, ["tw"])
-    _add(SCHEDULE_CONFIG.get("SELL_SCAN_US_TIME", "07:17"), get_sell_recommendations, ["us"])
+    _add(SCHEDULE_CONFIG.get("SELL_SCAN_TW_TIME", "15:17"), _sell_scan, ["tw"])
+    _add(SCHEDULE_CONFIG.get("SELL_SCAN_US_TIME", "07:17"), _sell_scan, ["us"])
     # 國會議員交易：美東 21:00（台灣時間隔日 09:00），週一至週五
     h, m = SCHEDULE_CONFIG.get("CONGRESS_TRADES_TIME", "21:00").split(":")
     scheduler.add_job(_congress_trades, CronTrigger(hour=h, minute=m, day_of_week="mon-fri"))
@@ -192,6 +203,7 @@ _TAGS = [
     {"name": "Trade",        "description": "🤖 **自動交易** — 美股 IB / 台股永豐 / 玉山下單"},
     {"name": "Analyst",       "description": "🎯 **分析師評等** — FMP Wall Street 買進/持有/賣出票數 + 目標價共識"},
     {"name": "CongressTrades","description": "🏛 **國會議員交易** — Capitol Trades STOCK Act 申報，議員買賣資訊差監控"},
+    {"name": "ETF",           "description": "📊 **台股 ETF 分析** — 績效排行、折溢價、費用率、配息、報酬率（yfinance）"},
 ]
 
 app = FastAPI(
@@ -289,10 +301,8 @@ async def _telegram_notify_middleware(request: Request, call_next):
 
     async def _send(text: str):
         try:
-            from src.utils.notifier import _broadcast
-            await asyncio.get_event_loop().run_in_executor(
-                None, _broadcast, text, "API呼叫", {"telegram"}
-            )
+            from src.utils.notifier import async_broadcast
+            await async_broadcast(text, "API呼叫", {"telegram"})
         except Exception as e:
             logger.warning(f"[middleware] Telegram 推播失敗: {e}")
 
@@ -355,6 +365,7 @@ app.include_router(tick_stream_router)
 app.include_router(analyst_router)
 app.include_router(insider_router)
 app.include_router(congress_trades_router)
+app.include_router(etf_router)
 
 
 if __name__ == "__main__":

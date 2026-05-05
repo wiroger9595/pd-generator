@@ -18,7 +18,7 @@ class CrossAnalyzer:
         """
         import asyncio
         import re
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         is_tw = re.match(r'^\d+$', str(symbol))
         
         # 1. 基礎數據 (不分市場)

@@ -49,7 +49,7 @@ async def get_insider_trades(tickers=None, days_back=30):
         logger.info(f"[Insider] 自動取得 {len(tickers)} 支股票（三大指數）")
 
     # 批次抓取 Form 4（每批 10 支）
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     trades = await loop.run_in_executor(
         None,
         lambda: repo.fetch_form4(tickers, days_back=days_back)

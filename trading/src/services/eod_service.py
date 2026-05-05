@@ -45,7 +45,7 @@ async def sync_tw_eod(date_str: str = None) -> dict:
     logger.info(f"[EOD] 開始同步台股 EOD 數據，日期: {date_str}")
 
     # ── 並行抓取四個 FinMind dataset ─────────────────────────────────────
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _fetch_inst():
         return repo.get(

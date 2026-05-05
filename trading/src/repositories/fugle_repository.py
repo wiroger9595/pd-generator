@@ -172,7 +172,7 @@ class FugleMonitor:
             stock.on("error", lambda e: logger.error(f"[Fugle WS] error: {e}"))
             stock.on("close", lambda: logger.info("[Fugle WS] 連線關閉"))
 
-            await asyncio.get_event_loop().run_in_executor(None, stock.connect)
+            await asyncio.get_running_loop().run_in_executor(None, stock.connect)
 
             # 訂閱所有監控股票的成交事件
             for symbol in self._monitored:

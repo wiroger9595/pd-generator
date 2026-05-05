@@ -171,7 +171,7 @@ async def get_technical_indicators(symbol: str, market: str = "us", df: pd.DataF
     df: 若傳入歷史 K 線則同時計算本地指標；若為 None 則略過本地計算
     """
     repo = get_av_technical_repo()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     av_symbol = symbol.replace(".TW", "").replace(".TWO", "")
     logger.info(f"[Technical] 開始抓取 {av_symbol} 技術指標")

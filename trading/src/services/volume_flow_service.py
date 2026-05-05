@@ -41,7 +41,7 @@ async def scan_tw_volume_flow(extra_tickers: list[str] = None) -> dict:
     logger.info(f"[VolumeFlow] 台股掃描 {len(tickers)} 檔")
 
     from src.repositories.volume_flow_repository import get_tw_volume_flow
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # 並行抓取（Fugle REST 不限速）
     tasks = [
@@ -80,7 +80,7 @@ async def scan_us_volume_flow(extra_tickers: list[str] = None) -> dict:
     logger.info(f"[VolumeFlow] 美股掃描 {len(tickers)} 檔")
 
     from src.repositories.volume_flow_repository import get_us_volume_flow
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     tasks = [
         loop.run_in_executor(None, lambda t=t: get_us_volume_flow(t, minutes=20))

@@ -257,7 +257,7 @@ async def get_provider_recommendations(
     scanned = 0
     skipped_cooldown = 0
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     executor = ThreadPoolExecutor(max_workers=1)
 
     for stock in scan_list:
@@ -317,7 +317,7 @@ async def get_tw_recommendations(
     logger.info(f"[Recommend] Starting finmind TW scan: {len(scan_list)}/{len(stock_list)} stocks, top_n={top_n}")
 
     results = []
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     executor = ThreadPoolExecutor(max_workers=1)
 
     for stock in scan_list:
@@ -452,7 +452,7 @@ async def get_sell_recommendations(market: str) -> dict:
     logger.info(f"[SellScan] {market.upper()} 開始掃描 {len(all_targets)} 檔...")
 
     data_service = DataService()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     executor = ThreadPoolExecutor(max_workers=1)
 
     sell_results = []

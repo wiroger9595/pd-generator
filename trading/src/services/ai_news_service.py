@@ -15,7 +15,7 @@ async def analyze_tw_news_sentiment(ticker: str, name: str = "") -> dict:
     1. Google News RSS 抓取最新 10 則新聞
     2. Gemini AI 分析整體情緒並評分
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     logger.info(f"[AiNews] 開始分析台股 {ticker} 新聞情緒")
 
@@ -64,7 +64,7 @@ async def analyze_us_news_sentiment(ticker: str, name: str = "") -> dict:
     1. Google News RSS 抓取最新 10 則新聞
     2. Gemini AI 分析整體情緒並評分
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     logger.info(f"[AiNews] 開始分析美股 {ticker} 新聞情緒")
 

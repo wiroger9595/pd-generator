@@ -1,3 +1,5 @@
+import asyncio
+import httpx
 import requests
 import time
 import os
@@ -114,7 +116,7 @@ _ALL_CHANNELS = {"line", "telegram"}
 
 
 def _broadcast(text: str, label: str = "訊息", channels: set = _ALL_CHANNELS) -> None:
-    """發送通知，channels 控制哪些管道：{"line"}, {"telegram"}, 或兩者。"""
+    """發送通知（同步版，供 run_in_executor 使用）"""
     db_users = get_all_users()
     line_configs = get_line_bot_configs()
     tg_token, tg_chats = get_telegram_config()
@@ -139,10 +141,116 @@ def _broadcast(text: str, label: str = "訊息", channels: set = _ALL_CHANNELS) 
         logger.info(f"[Notify] {label} 已發送 → {' + '.join(parts)}")
 
 
+# ── Async 版（httpx，不阻塞 event loop）─────────────────────────────────────
+
+async def _async_multicast(token: str, users: list[str], text: str) -> int:
+    """LINE multicast async 版"""
+    if not users:
+        return 0
+    sent = 0
+    async with httpx.AsyncClient(timeout=15) as client:
+        for i in range(0, len(users), 500):
+            batch = users[i:i + 500]
+            try:
+                r = await client.post(
+                    "https://api.line.me/v2/bot/message/multicast",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"to": batch, "messages": [{"type": "text", "text": text}]},
+                )
+                if r.status_code == 200:
+                    sent += len(batch)
+                else:
+                    logger.warning(f"[LINE] multicast 失敗: {r.text[:100]}")
+            except Exception as e:
+                logger.error(f"[LINE] 發送異常: {e}")
+    return sent
+
+
+async def _async_telegram_send(bot_token: str, chat_ids: list[str], text: str) -> int:
+    """Telegram sendMessage async 版，超過 4096 字元自動切割"""
+    if not bot_token or not chat_ids:
+        logger.warning("[Telegram] 無 token 或 chat_id，跳過發送")
+        return 0
+    MAX = 4096
+    chunks = [text[i:i + MAX] for i in range(0, len(text), MAX)] if len(text) > MAX else [text]
+    sent = 0
+    async with httpx.AsyncClient(timeout=15) as client:
+        for chat_id in chat_ids:
+            for chunk in chunks:
+                try:
+                    r = await client.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                        json={"chat_id": chat_id, "text": chunk},
+                    )
+                    if r.status_code == 200:
+                        sent += 1
+                        logger.info(f"[Telegram] 已發送至 chat={chat_id}")
+                    else:
+                        logger.error(f"[Telegram] 發送失敗 chat={chat_id}: {r.text[:100]}")
+                except Exception as e:
+                    logger.error(f"[Telegram] 發送異常: {e}")
+    logger.info(f"[Telegram] 本次共成功發送 {sent} 則訊息")
+    return sent
+
+
+async def async_broadcast(text: str, label: str = "訊息", channels: set = _ALL_CHANNELS) -> None:
+    """發送通知 async 版（httpx，不阻塞 event loop）"""
+    db_users = get_all_users()
+    line_configs = get_line_bot_configs()
+    tg_token, tg_chats = get_telegram_config()
+
+    tasks = []
+    if "line" in channels:
+        for config in line_configs:
+            users = _collect_users(config, db_users)
+            tasks.append(_async_multicast(config["token"], users, text))
+    if "telegram" in channels:
+        tasks.append(_async_telegram_send(tg_token, tg_chats, text))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    line_sent = sum(r for r in results[:len(line_configs)] if isinstance(r, int)) if "line" in channels else 0
+    tg_sent   = results[-1] if "telegram" in channels and isinstance(results[-1], int) else 0
+
+    if line_sent == 0 and tg_sent == 0:
+        logger.warning(f"[Notify] {label}：目標管道未設定或發送失敗")
+    else:
+        parts = []
+        if line_sent: parts.append(f"LINE×{line_sent}")
+        if tg_sent:   parts.append(f"Telegram×{tg_sent}")
+        logger.info(f"[Notify] {label} 已發送 → {' + '.join(parts)}")
+
+
+async def async_combined_report(market_name, buy_stocks, sell_holdings, sell_watched=[], channels=frozenset({"telegram"})) -> None:
+    """send_combined_report 的 async 版，供排程 async context 使用"""
+    if not buy_stocks and not sell_holdings and not sell_watched:
+        return
+    header = f"【📊 {market_name} 盤後掃描報告】\n日期: {time.strftime('%Y-%m-%d')}\n{'='*15}\n\n"
+    body = ""
+    if sell_holdings:
+        body += "⚠️ 【！！庫存賣出警示！！】\n"
+        for s in sell_holdings:
+            body += format_stock_info(s)
+        body += "\n"
+    if buy_stocks:
+        body += "🚀 【建議買進 (爆量長紅)】\n"
+        for s in buy_stocks:
+            body += format_stock_info(s)
+        body += "\n"
+    if sell_watched:
+        body += "🛑 【觀察名單賣出建議】\n"
+        for s in sell_watched:
+            body += format_stock_info(s)
+        body += "\n"
+    await async_broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 綜合報告", channels)
+
+
 # ── 通用維度報告（Telegram only）──────────────────────────────────────────────
 
 def send_signal_report(market_name: str, dimension: str, signal_type: str, items: list) -> None:
-    """籌碼/技術/消息/基本面 任意維度的買進/賣出訊號，Telegram only"""
+    """籌碼/技術/消息/基本面 任意維度的買進/賣出訊號，無結果不發，Telegram only"""
+    if not items:
+        return
     emoji = "📈" if signal_type == "buy" else "📉"
     label = "買進" if signal_type == "buy" else "賣出"
     header = (
@@ -150,11 +258,8 @@ def send_signal_report(market_name: str, dimension: str, signal_type: str, items
         f"日期: {time.strftime('%Y-%m-%d')}\n"
         f"{'='*15}\n\n"
     )
-    if not items:
-        body = f"今日無{dimension}{label}訊號。\n"
-    else:
-        body = ""
-        for s in items:
+    body = ""
+    for s in items:
             score = s.get("score") or s.get("buy_points", {}).get("score", 0)
             reason = (s.get("reason") or s.get("buy_points", {}).get("reason", "")
                       or s.get("sell_reason", "") or "—")
@@ -357,4 +462,4 @@ def send_daily_summary(market_name: str, buy_results: list, sell_results: list):
                     body += f"  [{lbl}] {d.get('score',0):+d} {str(d.get('reason',''))[:35]}\n"
         body += "\n"
 
-    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 每日統整")
+    _broadcast(header + body + f"{'='*15}\n投資有風險，請獨立判斷。", f"{market_name} 每日統整", channels={"telegram"})

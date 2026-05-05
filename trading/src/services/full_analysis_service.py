@@ -297,7 +297,7 @@ async def get_us_full_analysis(ticker: str, name: str = "") -> dict:
     chip_score, chip_reason = _score_us_volume(ticker)
 
     # ③ 分析師評等 — FMP（同步呼叫，在 executor 中執行）
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     analyst_data = await loop.run_in_executor(None, _fetch_fmp_analyst, ticker)
     current_price = tech_result.get("current_price", 0) if tech_result else 0
     analyst_score, analyst_reason = _score_analyst(analyst_data, current_price)

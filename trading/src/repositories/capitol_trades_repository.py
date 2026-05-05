@@ -72,17 +72,24 @@ def _normalize(raw: dict) -> dict:
     }
 
 
-def fetch_trades(pages: int = 3, page_size: int = 96) -> list[dict]:
+def fetch_trades(pages: int = 3, page_size: int = 96, months: int = 0) -> list[dict]:
     """
     爬取最新幾頁的國會議員交易（透過 Next.js RSC 端點）。
 
     Args:
-        pages:     要爬取的頁數（每頁最多 96 筆，預設 3 頁 ≈ 288 筆）
+        pages:     最多爬幾頁（每頁 96 筆）；months > 0 時自動擴頁
         page_size: 每頁筆數（capitoltrades 支援 20 / 96）
+        months:    若 > 0，爬取直到 tx_date < 今天往前 months 個月為止
 
     Returns:
         list[dict]: 正規化後的交易列表，已依 tx_date 降冪排序
     """
+    from datetime import date, timedelta
+    cutoff = ""
+    if months > 0:
+        cutoff = (date.today() - timedelta(days=months * 30)).isoformat()
+        pages = max(pages, months * 4)   # 估算：每月約 4 頁
+
     all_trades: list[dict] = []
     seen_ids: set[int] = set()
 
@@ -101,15 +108,28 @@ def fetch_trades(pages: int = 3, page_size: int = 96) -> list[dict]:
             if not raw_list:
                 logger.info(f"[CongressTrades] page={page} 無資料，停止翻頁")
                 break
+            oldest_on_page = ""
             for raw in raw_list:
                 tx_id = raw.get("_txId")
                 if tx_id and tx_id not in seen_ids:
                     seen_ids.add(tx_id)
-                    all_trades.append(_normalize(raw))
+                    normalized = _normalize(raw)
+                    all_trades.append(normalized)
+                    d = normalized["tx_date"] or ""
+                    if d and (not oldest_on_page or d < oldest_on_page):
+                        oldest_on_page = d
             logger.info(f"[CongressTrades] page={page} 取得 {len(raw_list)} 筆，累計 {len(all_trades)}")
+            # 已抓到 cutoff 日期之前就停
+            if cutoff and oldest_on_page and oldest_on_page < cutoff:
+                logger.info(f"[CongressTrades] 已達 {months} 個月截止日 {cutoff}，停止翻頁")
+                break
         except Exception as e:
             logger.error(f"[CongressTrades] 爬取 page={page} 失敗: {e}")
             break
+
+    # 過濾掉 cutoff 之前的資料
+    if cutoff:
+        all_trades = [t for t in all_trades if (t["tx_date"] or "") >= cutoff]
 
     all_trades.sort(key=lambda x: x["tx_date"] or "", reverse=True)
     return all_trades
