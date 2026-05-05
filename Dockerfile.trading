@@ -7,9 +7,8 @@ ENV PYTHONPATH=/app/trading
 WORKDIR /app
 
 # 雲端只裝必要套件，排除 ib_insync / shioaji / ccxt（合計 ~200MB RAM）
-# cache-bust: 2026-05-06
 COPY requirements.cloud.txt .
-RUN pip install --no-cache-dir -r requirements.cloud.txt
+RUN pip install --no-cache-dir httpx matplotlib -r requirements.cloud.txt
 RUN pip install --no-cache-dir "TA-Lib>=0.4.28"
 
 COPY . .
