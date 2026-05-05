@@ -32,3 +32,6 @@ fugle-marketdata
 
 # Async utilities
 nest_asyncio
+
+# Charting (insider trend charts)
+matplotlib
