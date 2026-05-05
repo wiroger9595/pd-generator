@@ -7,7 +7,8 @@ set -e
 PROJECT=construction-management-458415
 SERVICE=trading-api
 REGION=asia-east1
-DOCKERFILE=Dockerfile.trading
+REPO=asia-east1-docker.pkg.dev/$PROJECT/cloud-run-source-deploy
+IMAGE=$REPO/$SERVICE:latest
 
 # ── 1. Git commit + push ───────────────────────────────────────────────
 echo "🔍 檢查未提交的變更..."
@@ -24,10 +25,17 @@ git push origin main
 
 # ── 2. 部署到 Cloud Run ────────────────────────────────────────────────
 echo ""
-echo "🚀 開始部署到 Cloud Run ($SERVICE / $REGION)..."
+echo "🔨 建置 Docker image..."
+gcloud builds submit \
+  --project $PROJECT \
+  --dockerfile Dockerfile.trading \
+  --tag $IMAGE \
+  .
 
+echo ""
+echo "🚀 部署到 Cloud Run ($SERVICE / $REGION)..."
 gcloud run deploy $SERVICE \
-  --dockerfile $DOCKERFILE \
+  --image $IMAGE \
   --region $REGION \
   --platform managed \
   --allow-unauthenticated \
