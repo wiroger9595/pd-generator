@@ -28,8 +28,8 @@ echo ""
 echo "🔨 建置 Docker image..."
 gcloud builds submit \
   --project $PROJECT \
-  --dockerfile Dockerfile.trading \
-  --tag $IMAGE \
+  --config cloudbuild.trading.yaml \
+  --substitutions _IMAGE=$IMAGE \
   .
 
 echo ""
