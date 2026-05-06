@@ -66,6 +66,54 @@ async def finnhub_scan(
     }
 
 
+@router.get("/daily-scan", summary="每日預設 watchlist 掃描（記憶體+半導體+AI 龍頭）")
+async def finnhub_daily_scan(
+    min_score: int = Query(20, description="只回傳總分 >= 此值的標的"),
+    notify:    bool = Query(False, description="是否發 Telegram"),
+):
+    """
+    用預設 watchlist（記憶體/半導體/AI 龍頭，~50 檔）跑掃描。
+    Cron 每天自動跑一次（FINNHUB_SCAN_TIME，預設 07:30 台灣時間）。
+    手動觸發：notify=true 即會把結果送 Telegram。
+    """
+    import os, asyncio
+    if not os.getenv("FINNHUB_API_KEY"):
+        return {"status": "error", "message": "FINNHUB_API_KEY 未設定"}
+
+    from src.services.finnhub_watchlist import get_default_watchlist
+    watchlist = get_default_watchlist()
+
+    results = []
+    for i, ticker in enumerate(watchlist):
+        try:
+            results.append(await analyze_finnhub_signals(ticker))
+        except Exception as e:
+            logger.warning(f"[FinnhubDailyScan] {ticker} 失敗：{e}")
+        if (i + 1) % 12 == 0:
+            await asyncio.sleep(60)
+
+    matched = [r for r in results if r["total_score"] >= min_score]
+    matched.sort(key=lambda x: x["total_score"], reverse=True)
+
+    if notify and matched:
+        from src.utils.notifier import async_broadcast
+        lines = [f"📈 【美股 Finnhub 訊號掃描】門檻 {min_score}+",
+                 f"掃描 {len(results)} 檔，命中 {len(matched)} 檔", "=" * 30]
+        for r in matched[:15]:
+            lines.append(f"\n🔥 {r['ticker']} (分數 {r['total_score']})")
+            for reason in r["reasons"]:
+                lines.append(f"  • {reason}")
+        await async_broadcast("\n".join(lines), "FinnhubDailyScan", {"telegram"})
+
+    return {
+        "status":   "success",
+        "scanned":  len(results),
+        "matched":  len(matched),
+        "min_score": min_score,
+        "results":  matched,
+    }
+
+
 @router.get("/raw/{ticker}", summary="原始資料（4 個 Finnhub endpoint 直接回傳）")
 async def finnhub_raw(ticker: str = Path(..., description="美股代號")):
     """除錯用：直接回傳 Finnhub 4 個 endpoint 的原始資料"""

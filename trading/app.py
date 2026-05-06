@@ -139,6 +139,46 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
         channels = {"telegram", "line"} if send_line else {"telegram"}
         await run_congress_trades_scan(pages=3, notify=True, channels=channels)
 
+    async def _daily_finnhub_scan():
+        """每日 Finnhub 四大訊號掃描（目標價/評等/升降級/EPS surprise）"""
+        if not os.getenv("FINNHUB_API_KEY"):
+            logger.warning("[FinnhubScan] FINNHUB_API_KEY 未設定，略過")
+            return
+        from src.services.finnhub_signal_service import analyze_finnhub_signals
+        from src.services.finnhub_watchlist import get_default_watchlist
+        from src.utils.notifier import async_broadcast
+
+        watchlist = get_default_watchlist()
+        min_score = int(os.getenv("FINNHUB_MIN_SCORE", "20"))
+        logger.info(f"[FinnhubScan] 開始掃描 {len(watchlist)} 檔，門檻={min_score}")
+
+        results = []
+        # 60 req/min；每檔 4 calls → 串行限速到 12 檔/分鐘
+        import asyncio as _asyncio
+        for i, ticker in enumerate(watchlist):
+            try:
+                r = await analyze_finnhub_signals(ticker)
+                results.append(r)
+            except Exception as e:
+                logger.warning(f"[FinnhubScan] {ticker} 失敗：{e}")
+            if (i + 1) % 12 == 0:
+                await _asyncio.sleep(60)
+
+        matched = [r for r in results if r["total_score"] >= min_score]
+        matched.sort(key=lambda x: x["total_score"], reverse=True)
+        if not matched:
+            logger.info(f"[FinnhubScan] 無達標標的（門檻={min_score}），略過通知")
+            return
+
+        lines = [f"📈 【美股 Finnhub 訊號掃描】門檻 {min_score}+",
+                 f"掃描 {len(results)} 檔，命中 {len(matched)} 檔", "=" * 30]
+        for r in matched[:15]:
+            lines.append(f"\n🔥 {r['ticker']} (分數 {r['total_score']})")
+            for reason in r["reasons"]:
+                lines.append(f"  • {reason}")
+        text = "\n".join(lines)
+        await async_broadcast(text, "FinnhubScan", {"telegram"})
+
     async def _sell_scan(market: str):
         result = await get_sell_recommendations(market)
         sell_holdings = result.get("sell_holdings", [])
@@ -158,6 +198,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
     _add(SCHEDULE_CONFIG.get("DAILY_ANALYSIS_US_TIME", "06:47"), _daily_us)
     _add(SCHEDULE_CONFIG.get("SELL_SCAN_TW_TIME", "15:17"), _sell_scan, ["tw"])
     _add(SCHEDULE_CONFIG.get("SELL_SCAN_US_TIME", "07:17"), _sell_scan, ["us"])
+    _add(SCHEDULE_CONFIG.get("FINNHUB_SCAN_TIME", "07:30"), _daily_finnhub_scan)
     # 國會議員交易：美東 21:00（台灣時間隔日 09:00），週一至週五
     h, m = SCHEDULE_CONFIG.get("CONGRESS_TRADES_TIME", "21:00").split(":")
     scheduler.add_job(_congress_trades, CronTrigger(hour=h, minute=m, day_of_week="mon-fri"))
