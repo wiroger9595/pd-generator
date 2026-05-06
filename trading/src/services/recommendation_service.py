@@ -311,7 +311,12 @@ async def get_tw_recommendations(
 
     if stock_list is None:
         from src.stock.crawler import get_tw_stock_list
-        stock_list = get_tw_stock_list()
+        from src.services.tw_watchlist import get_default_tw_watchlist
+        full_list = get_tw_stock_list()
+        watchlist = get_default_tw_watchlist()
+        watchlist_codes = {s["ticker"] for s in watchlist}
+        # watchlist 先掃，再補上 full_list（去重）
+        stock_list = watchlist + [s for s in full_list if s["ticker"] not in watchlist_codes]
 
     scan_list = stock_list[:max_scan]
     logger.info(f"[Recommend] Starting finmind TW scan: {len(scan_list)}/{len(stock_list)} stocks, top_n={top_n}")
