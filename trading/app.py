@@ -149,7 +149,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
         from src.utils.notifier import async_broadcast
 
         watchlist = get_default_watchlist()
-        min_score = int(os.getenv("FINNHUB_MIN_SCORE", "20"))
+        min_score = int(os.getenv("FINNHUB_MIN_SCORE", "30"))
         logger.info(f"[FinnhubScan] 開始掃描 {len(watchlist)} 檔，門檻={min_score}")
 
         results = []

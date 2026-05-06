@@ -88,9 +88,11 @@ def _analyze_eps_surprise(surprises: list[dict]) -> tuple[int, str]:
     score = 0
     reasons = []
 
-    # 最新季加分
+    # 最新季加分（>200% 視為低基期失真，標註但不加分）
     if latest_pct is not None:
-        if latest_pct >= 20:
+        if latest_pct > 200:
+            reasons.append(f"最新季 EPS 超預期 {latest_pct:.0f}% ⚠️低基期失真")
+        elif latest_pct >= 20:
             score += 25; reasons.append(f"最新季 EPS 超預期 {latest_pct:.1f}%")
         elif latest_pct >= 10:
             score += 15; reasons.append(f"最新季 EPS 超預期 {latest_pct:.1f}%")
@@ -99,9 +101,11 @@ def _analyze_eps_surprise(surprises: list[dict]) -> tuple[int, str]:
         elif latest_pct <= -10:
             score -= 15; reasons.append(f"最新季 EPS 不如預期 {latest_pct:.1f}%")
 
-    # 近 4 季平均（穩定性加分）
+    # 近 4 季平均（>200% 視為失真）
     if avg_pct is not None and len(pcts) >= 3:
-        if avg_pct >= 10:
+        if avg_pct > 200:
+            reasons.append(f"近 4 季平均超預期 {avg_pct:.0f}% ⚠️低基期失真")
+        elif avg_pct >= 10:
             score += 10; reasons.append(f"近 4 季平均超預期 {avg_pct:.1f}%")
         elif avg_pct >= 5:
             score += 5;  reasons.append(f"近 4 季平均超預期 {avg_pct:.1f}%")

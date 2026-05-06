@@ -40,7 +40,7 @@ async def finnhub_signals(ticker: str = Path(..., description="美股代號，�
 async def finnhub_scan(
     tickers: str = Query("MU,SNDK,TSM,NVDA,AVGO,AMD,SMCI,ASML",
                          description="逗號分隔，預設記憶體+半導體龍頭"),
-    min_score: int = Query(15, description="只回傳總分 >= 此值的標的"),
+    min_score: int = Query(30, description="只回傳總分 >= 此值的標的"),
 ):
     """
     批次掃描多檔，按總分排序回傳
@@ -66,7 +66,7 @@ async def finnhub_scan(
 
 @router.get("/daily-scan", summary="每日預設 watchlist 掃描（記憶體+半導體+AI 龍頭）")
 async def finnhub_daily_scan(
-    min_score: int = Query(20, description="只回傳總分 >= 此值的標的"),
+    min_score: int = Query(30, description="只回傳總分 >= 此值的標的"),
     notify:    bool = Query(False, description="是否發 Telegram"),
 ):
     """
