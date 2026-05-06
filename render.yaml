@@ -41,3 +41,5 @@ services:
         sync: false      # Google AI Studio 申請免費 key
       - key: FUGLE_API_KEY
         sync: false      # Fugle 申請免費 key（盤中監控用）
+      - key: FINNHUB_API_KEY
+        sync: false      # finnhub.io 免費 key（分析師目標價/EPS surprise）

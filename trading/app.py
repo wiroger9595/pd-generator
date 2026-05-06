@@ -43,6 +43,7 @@ from src.controllers import (
     insider_router,
     congress_trades_router,
     etf_router,
+    finnhub_router,
 )
 
 
@@ -372,6 +373,7 @@ app.include_router(analyst_router)
 app.include_router(insider_router)
 app.include_router(congress_trades_router)
 app.include_router(etf_router)
+app.include_router(finnhub_router)
 
 
 if __name__ == "__main__":
