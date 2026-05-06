@@ -95,8 +95,11 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
     from src.utils.notifier import async_combined_report
 
     async def _daily_tw():
-        result = await get_tw_recommendations(top_n=5, max_scan=30)
+        result = await get_tw_recommendations(top_n=5, max_scan=100)
         recs = result.get("recommendations", [])
+        if not recs:
+            logger.info("[DailyTW] 無共振訊號，略過通知")
+            return
         buy_list = [{"ticker": r["ticker"], "name": r.get("name", r["ticker"]),
                      "price": r["price"],
                      "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")}} for r in recs]
@@ -105,7 +108,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
     async def _daily_us():
         merged: dict = {}
         for provider in ["polygon", "alpha_vantage", "tiingo"]:
-            result = await get_provider_recommendations(provider, top_n=10, max_scan=20)
+            result = await get_provider_recommendations(provider, top_n=10, max_scan=60)
             if result.get("status") != "success":
                 continue
             for rec in result.get("recommendations", []):
@@ -117,6 +120,9 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler):
                     merged[t]["provider_count"] += 1
                     merged[t]["providers"].append(provider)
         top = sorted(merged.values(), key=lambda x: x["score"], reverse=True)[:5]
+        if not top:
+            logger.info("[DailyUS] 無共振訊號，略過通知")
+            return
         buy_list = [{"ticker": r["ticker"], "name": r.get("name", r["ticker"]),
                      "price": r["price"],
                      "buy_points": {"score": r["score"], "reason": r.get("reason", "技術訊號")}} for r in top]

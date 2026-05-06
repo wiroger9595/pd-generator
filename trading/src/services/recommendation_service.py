@@ -167,7 +167,7 @@ def _score_stock(df, ticker: str) -> dict | None:
                 score += 5
                 reasons.append(f"連漲{consec_up}天")
 
-        if score < 25:
+        if score < 15:
             return None
 
         # 計算建議進場價與目標價
