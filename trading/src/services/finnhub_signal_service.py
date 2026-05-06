@@ -1,33 +1,53 @@
 """
-Finnhub 訊號分析 Service — 把目標價變動、評等變化、EPS surprise 轉成可加分的訊號
+Finnhub 訊號分析 Service — 免費版可用的兩個 endpoint：
+- /stock/recommendation（評等趨勢，含當下絕對水準與月變化）
+- /stock/earnings（近 4 季 EPS actual vs estimate）
+
+付費才能用的 /stock/price-target、/stock/upgrade-downgrade 已移除
 """
 import asyncio
 from src.utils.logger import logger
 from src.repositories.finnhub_repository import (
-    get_price_target,
     get_recommendation_trends,
-    get_upgrade_downgrade,
     get_earnings_surprises,
 )
 
 
-def _analyze_target(target: dict | None) -> tuple[int, str]:
-    """目標價中位 vs 平均，分析師人數越多越可信"""
-    if not target:
+def _analyze_recommendation_level(trends: list[dict]) -> tuple[int, str]:
+    """評等絕對水準：買進比例 + 總分析師人數"""
+    if not trends:
         return 0, ""
-    median = target.get("targetMedian") or target.get("targetMean") or 0
-    n = target.get("numberOfAnalysts") or 0
-    if not median or not n:
+    latest = trends[0]
+    sb = latest.get("strongBuy", 0) or 0
+    b  = latest.get("buy", 0) or 0
+    h  = latest.get("hold", 0) or 0
+    s  = latest.get("sell", 0) or 0
+    ss = latest.get("strongSell", 0) or 0
+    total = sb + b + h + s + ss
+    if total == 0:
         return 0, ""
-    if n >= 20:
-        return 10, f"目標價中位 {median} ({n} 位分析師)"
-    if n >= 10:
-        return 6, f"目標價中位 {median} ({n} 位分析師)"
-    return 3, f"目標價中位 {median} ({n} 位分析師)"
+    bullish = sb + b
+    pct = bullish / total * 100
+
+    score = 0
+    if pct >= 90 and total >= 20:
+        score = 20
+    elif pct >= 80 and total >= 15:
+        score = 15
+    elif pct >= 70 and total >= 10:
+        score = 10
+    elif pct >= 60:
+        score = 5
+    elif pct <= 30:
+        score = -10
+
+    if score == 0:
+        return 0, ""
+    return score, f"買進評等 {bullish}/{total} ({pct:.0f}%)"
 
 
 def _analyze_recommendation_trend(trends: list[dict]) -> tuple[int, str]:
-    """比對最新月 vs 上一月：strongBuy + buy 增加 → 加分"""
+    """評等月變化：strongBuy + buy 增減"""
     if len(trends) < 2:
         return 0, ""
     latest, prev = trends[0], trends[1]
@@ -43,65 +63,75 @@ def _analyze_recommendation_trend(trends: list[dict]) -> tuple[int, str]:
     return 0, ""
 
 
-def _analyze_upgrades(events: list[dict], days: int = 30) -> tuple[int, str]:
-    """近 N 天的 upgrade 數量"""
-    if not events:
-        return 0, ""
-    import time
-    cutoff = int(time.time()) - days * 86400
-    ups = [e for e in events if e.get("action") == "up" and e.get("gradeTime", 0) >= cutoff]
-    downs = [e for e in events if e.get("action") == "down" and e.get("gradeTime", 0) >= cutoff]
-    score = len(ups) * 5 - len(downs) * 5
-    score = max(-15, min(20, score))
-    if not ups and not downs:
-        return 0, ""
-    return score, f"近 {days} 天 升級 {len(ups)} / 降級 {len(downs)}"
-
-
 def _analyze_eps_surprise(surprises: list[dict]) -> tuple[int, str]:
-    """最新一季 EPS surprise（實際 vs 預期）"""
+    """近 4 季 EPS surprise：最新季 + 平均"""
     if not surprises:
         return 0, ""
-    latest = surprises[0]
-    pct = latest.get("surprisePercent")
-    if pct is None:
-        actual   = latest.get("actual") or 0
-        estimate = latest.get("estimate") or 0
+
+    def _pct(item: dict) -> float | None:
+        p = item.get("surprisePercent")
+        if p is not None:
+            return p
+        actual   = item.get("actual") or 0
+        estimate = item.get("estimate") or 0
         if not estimate:
-            return 0, ""
-        pct = (actual - estimate) / abs(estimate) * 100
-    if pct >= 20:
-        return 25, f"EPS 超預期 {pct:.1f}%"
-    if pct >= 10:
-        return 15, f"EPS 超預期 {pct:.1f}%"
-    if pct >= 5:
-        return 8, f"EPS 超預期 {pct:.1f}%"
-    if pct <= -10:
-        return -15, f"EPS 不如預期 {pct:.1f}%"
-    return 0, ""
+            return None
+        return (actual - estimate) / abs(estimate) * 100
+
+    latest_pct = _pct(surprises[0])
+    pcts = [p for p in (_pct(s) for s in surprises[:4]) if p is not None]
+    avg_pct = sum(pcts) / len(pcts) if pcts else None
+
+    if latest_pct is None and avg_pct is None:
+        return 0, ""
+
+    score = 0
+    reasons = []
+
+    # 最新季加分
+    if latest_pct is not None:
+        if latest_pct >= 20:
+            score += 25; reasons.append(f"最新季 EPS 超預期 {latest_pct:.1f}%")
+        elif latest_pct >= 10:
+            score += 15; reasons.append(f"最新季 EPS 超預期 {latest_pct:.1f}%")
+        elif latest_pct >= 5:
+            score += 8;  reasons.append(f"最新季 EPS 超預期 {latest_pct:.1f}%")
+        elif latest_pct <= -10:
+            score -= 15; reasons.append(f"最新季 EPS 不如預期 {latest_pct:.1f}%")
+
+    # 近 4 季平均（穩定性加分）
+    if avg_pct is not None and len(pcts) >= 3:
+        if avg_pct >= 10:
+            score += 10; reasons.append(f"近 4 季平均超預期 {avg_pct:.1f}%")
+        elif avg_pct >= 5:
+            score += 5;  reasons.append(f"近 4 季平均超預期 {avg_pct:.1f}%")
+        elif avg_pct <= -5:
+            score -= 5;  reasons.append(f"近 4 季平均不如預期 {avg_pct:.1f}%")
+
+    if score == 0:
+        return 0, ""
+    return score, "; ".join(reasons)
 
 
 async def analyze_finnhub_signals(ticker: str) -> dict:
     """
-    並行抓 4 種訊號，整合成單一分數
+    並行抓 2 種免費訊號（評等 + EPS），整合分數
+    最高約 +70 / 最低約 -40
     """
     ticker = ticker.upper()
     loop = asyncio.get_running_loop()
 
-    target, trends, events, surprises = await asyncio.gather(
-        loop.run_in_executor(None, get_price_target,           ticker),
-        loop.run_in_executor(None, get_recommendation_trends,  ticker),
-        loop.run_in_executor(None, get_upgrade_downgrade,      ticker),
-        loop.run_in_executor(None, get_earnings_surprises,     ticker),
+    trends, surprises = await asyncio.gather(
+        loop.run_in_executor(None, get_recommendation_trends, ticker),
+        loop.run_in_executor(None, get_earnings_surprises,    ticker),
     )
 
-    s1, r1 = _analyze_target(target)
+    s1, r1 = _analyze_recommendation_level(trends)
     s2, r2 = _analyze_recommendation_trend(trends)
-    s3, r3 = _analyze_upgrades(events)
-    s4, r4 = _analyze_eps_surprise(surprises)
+    s3, r3 = _analyze_eps_surprise(surprises)
 
-    total_score = s1 + s2 + s3 + s4
-    reasons = [r for r in [r1, r2, r3, r4] if r]
+    total_score = s1 + s2 + s3
+    reasons = [r for r in [r1, r2, r3] if r]
 
     logger.info(f"[Finnhub] {ticker} score={total_score} ({'; '.join(reasons) or 'no signal'})")
 
@@ -110,10 +140,10 @@ async def analyze_finnhub_signals(ticker: str) -> dict:
         "total_score":  total_score,
         "reasons":      reasons,
         "breakdown": {
-            "price_target":         {"score": s1, "reason": r1, "data": target},
-            "recommendation_trend": {"score": s2, "reason": r2, "latest": trends[0] if trends else None,
+            "recommendation_level": {"score": s1, "reason": r1, "latest": trends[0] if trends else None},
+            "recommendation_trend": {"score": s2, "reason": r2,
                                      "previous": trends[1] if len(trends) > 1 else None},
-            "upgrades_30d":         {"score": s3, "reason": r3, "events": events[:10]},
-            "eps_surprise":         {"score": s4, "reason": r4, "latest": surprises[0] if surprises else None},
+            "eps_surprise":         {"score": s3, "reason": r3,
+                                     "recent": surprises[:4] if surprises else []},
         },
     }

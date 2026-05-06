@@ -6,9 +6,7 @@ from fastapi import APIRouter, Path, Query
 from src.utils.logger import logger
 from src.services.finnhub_signal_service import analyze_finnhub_signals
 from src.repositories.finnhub_repository import (
-    get_price_target,
     get_recommendation_trends,
-    get_upgrade_downgrade,
     get_earnings_surprises,
 )
 
@@ -114,22 +112,18 @@ async def finnhub_daily_scan(
     }
 
 
-@router.get("/raw/{ticker}", summary="原始資料（4 個 Finnhub endpoint 直接回傳）")
+@router.get("/raw/{ticker}", summary="原始資料（評等 + EPS 直接回傳）")
 async def finnhub_raw(ticker: str = Path(..., description="美股代號")):
-    """除錯用：直接回傳 Finnhub 4 個 endpoint 的原始資料"""
+    """除錯用：直接回傳 Finnhub 免費 endpoint 的原始資料"""
     import asyncio
     loop = asyncio.get_running_loop()
-    target, trends, events, surprises = await asyncio.gather(
-        loop.run_in_executor(None, get_price_target,           ticker),
-        loop.run_in_executor(None, get_recommendation_trends,  ticker),
-        loop.run_in_executor(None, get_upgrade_downgrade,      ticker),
-        loop.run_in_executor(None, get_earnings_surprises,     ticker),
+    trends, surprises = await asyncio.gather(
+        loop.run_in_executor(None, get_recommendation_trends, ticker),
+        loop.run_in_executor(None, get_earnings_surprises,    ticker),
     )
     return {
         "status": "success",
         "ticker": ticker.upper(),
-        "price_target":         target,
         "recommendation_trend": trends,
-        "upgrade_downgrade":    events,
         "earnings_surprises":   surprises,
     }
