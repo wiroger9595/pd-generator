@@ -19,8 +19,7 @@ on:
     - cron: '30 10 * * 1-5'  # fundamental-tw (台灣 18:30)
     - cron: '45 10 * * 1-5'  # news-tw    (台灣 18:45)
 
-    # ── 台股每日統整 + EOD + 選股（台灣 19:00-20:30）─────────────────────────
-    - cron: '0 11 * * 1-5'   # tw-daily-summary
+    # ── 台股 EOD + 選股（台灣 19:00-20:30；tw-daily-summary 已拆到 daily-summary.yml）
     - cron: '0 12 * * 1-5'   # eod-sync-tw
     - cron: '30 12 * * 1-5'  # screener-tw（需要 eod-sync-tw）
 
@@ -34,8 +33,7 @@ on:
     # ── 美股選股（美東開盤前）────────────────────────────────────────────────
     - cron: '0 14 * * 2-6'   # screener-us (台灣 22:00)
 
-    # ── 美股每日統整（UTC 16:30 = 台灣 00:30+1）──────────────────────────────
-    - cron: '30 16 * * 1-5'  # us-daily-summary
+    # ── 美股 us-daily-summary 已拆到 daily-summary.yml ──────────────────────
 
     # ── 美股收盤後分析（UTC 21:00-22:00 = 美東 17:00-18:00）──────────────────
     - cron: '0 21 * * 2-6'   # chip-us
@@ -154,19 +152,7 @@ jobs:
             -sf "https://pd-generator-2uwi.onrender.com/api/news/sell/tw" || true
           echo "TW news done at $(date -u)"
 
-  # ── 台股每日統整（買進共振 + 賣出警示 → 一則 LINE + Telegram）─────────────
-  tw-daily-summary:
-    runs-on: ubuntu-latest
-    if: >
-      github.event.schedule == '0 11 * * 1-5' ||
-      github.event_name == 'workflow_dispatch'
-    steps:
-      - name: POST /api/summary/daily/tw
-        run: |
-          curl -X POST \
-            --connect-timeout 30 --max-time 300 --retry 2 \
-            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/tw"
-          echo "TW daily summary triggered at $(date -u)"
+  # ── tw-daily-summary 已拆到 daily-summary.yml ─────────────────────────────
 
   # ── EOD 快取同步（台股籌碼+基本面）──────────────────────────────────────────
   eod-sync-tw:
@@ -244,19 +230,7 @@ jobs:
             -sf "https://pd-generator-2uwi.onrender.com/api/screener/us" || true
           echo "US screener triggered at $(date -u)"
 
-  # ── 美股每日統整（買進共振 + 賣出警示 → 一則 LINE + Telegram）─────────────
-  us-daily-summary:
-    runs-on: ubuntu-latest
-    if: >
-      github.event.schedule == '30 16 * * 1-5' ||
-      github.event_name == 'workflow_dispatch'
-    steps:
-      - name: POST /api/summary/daily/us
-        run: |
-          curl -X POST \
-            --connect-timeout 30 --max-time 300 --retry 2 \
-            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us"
-          echo "US daily summary triggered at $(date -u)"
+  # ── us-daily-summary 已拆到 daily-summary.yml ─────────────────────────────
 
   # ── 美股收盤後：籌碼面（美東 17:00）──────────────────────────────────────
   chip-us:

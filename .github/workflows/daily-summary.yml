@@ -1,0 +1,45 @@
+name: Daily Summary (TW + US)
+
+# 拆成獨立 workflow 檔，避免 GitHub Actions 在多 cron workflow 中 silently 跳過
+# tw-daily-summary: UTC 11:00 = 台灣 19:00
+# us-daily-summary: UTC 16:30 = 台灣 00:30+1
+on:
+  schedule:
+    - cron: '0 11 * * 1-5'   # tw-daily-summary
+    - cron: '30 16 * * 1-5'  # us-daily-summary
+  workflow_dispatch:
+
+jobs:
+  tw-daily-summary:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 11 * * 1-5'
+    steps:
+      - name: Wake Render (cold-start safety)
+        run: |
+          curl --connect-timeout 60 --max-time 120 --retry 3 \
+            -sSf "https://pd-generator-2uwi.onrender.com/health"
+      - name: POST /api/summary/daily/tw
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/tw"
+          echo "TW daily summary triggered at $(date -u)"
+
+  us-daily-summary:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '30 16 * * 1-5'
+    steps:
+      - name: Wake Render (cold-start safety)
+        run: |
+          curl --connect-timeout 60 --max-time 120 --retry 3 \
+            -sSf "https://pd-generator-2uwi.onrender.com/health"
+      - name: POST /api/summary/daily/us
+        run: |
+          curl -X POST \
+            --connect-timeout 30 --max-time 300 --retry 2 \
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us"
+          echo "US daily summary triggered at $(date -u)"
