@@ -24,7 +24,7 @@ jobs:
         run: |
           curl -X POST \
             --connect-timeout 30 --max-time 300 --retry 2 \
-            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/tw"
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/tw?top_n=10&min_dimensions=1"
           echo "TW daily summary triggered at $(date -u)"
 
   us-daily-summary:
@@ -41,5 +41,5 @@ jobs:
         run: |
           curl -X POST \
             --connect-timeout 30 --max-time 300 --retry 2 \
-            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us"
+            -sSf "https://pd-generator-2uwi.onrender.com/api/summary/daily/us?top_n=10&min_dimensions=1"
           echo "US daily summary triggered at $(date -u)"
