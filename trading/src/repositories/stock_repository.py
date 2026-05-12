@@ -15,12 +15,20 @@ class StockRepository:
     @staticmethod
     def get_tw_stocks(max_count: int | None = None) -> list[StockInfo]:
         from src.stock.crawler import get_tw_stock_list
-        raw = get_tw_stock_list()
+        from src.services.tw_watchlist import get_default_tw_watchlist
+        try:
+            raw = get_tw_stock_list() or []
+        except Exception:
+            raw = []
+        # 把 watchlist 放最前面（去重），確保 TWSE 被擋時仍有核心標的可掃
+        watchlist = get_default_tw_watchlist()
+        wl_codes = {s["ticker"] for s in watchlist}
+        merged = watchlist + [s for s in raw if s["ticker"] not in wl_codes]
         if max_count:
-            raw = raw[:max_count]
+            merged = merged[:max_count]
         return [
             StockInfo(ticker=s["ticker"], name=s.get("name", s["ticker"]), market=Market.TW)
-            for s in raw
+            for s in merged
         ]
 
     # ── 美股 ──────────────────────────────────────────────────────────
