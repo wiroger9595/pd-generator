@@ -43,3 +43,9 @@ services:
         sync: false      # Fugle 申請免費 key（盤中監控用）
       - key: FINNHUB_API_KEY
         sync: false      # finnhub.io 免費 key（分析師目標價/EPS surprise）
+
+      # --- Telegram（所有通知都需要）---
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false      # ⚠️ 必設！否則所有 API 通知都不會發
+      - key: TELEGRAM_CHAT_IDS
+        sync: false      # ⚠️ 必設！逗號分隔的 chat_id 列表
